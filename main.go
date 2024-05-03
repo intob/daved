@@ -21,17 +21,18 @@ import (
 
 func main() {
 	bootstraps := []netip.AddrPort{
-		netip.MustParseAddrPort("54.195.136.26:1618"),
-		netip.MustParseAddrPort("3.255.246.69:1618"),
-		netip.MustParseAddrPort("3.250.242.160:1618"),
+		netip.MustParseAddrPort("54.170.214.154:1618"),
+		netip.MustParseAddrPort("3.249.184.30:1618"),
+		netip.MustParseAddrPort("18.200.244.108:1618"),
 	}
 	seed := flag.Bool("s", false, "start as seed, no bootstraps")
 	lap := flag.String("l", "[::]:0", "listen address:port")
 	bap := flag.String("b", "", "bootstrap address:port")
-	difficulty := flag.Int("d", 2, "number of leading zeros")
-	dcap := flag.Uint("dc", 500000, "dat map capacity")
-	fcap := flag.Uint("fc", 1000000, "cuckoo filter capacity")
-	verbose := flag.Bool("v", false, "verbose logging")
+	dcap := flag.Uint("dc", 500000, "Dat map capacity")
+	fcap := flag.Uint("fc", 1000000, "Cuckoo filter capacity")
+	verbose := flag.Bool("v", false, "Verbose logging. Use grep.")
+	difficulty := flag.Int("d", 2, "For set command. Number of leading zeros.")
+	hashonly := flag.Bool("h", false, "For set command. Output only dat hash.")
 	flag.Parse()
 	if *seed {
 		bootstraps = []netip.AddrPort{}
@@ -60,22 +61,29 @@ func main() {
 	if err != nil {
 		exit(1, "failed to make dave: %v", err)
 	}
-	go func(lch <-chan string) {
-		var dlf *os.File
-		if *verbose {
-			dlf = os.Stdout
-		} else {
-			dlf, err = os.Open(os.DevNull)
-			if err != nil {
-				panic(err)
+	if *hashonly {
+		go func() {
+			for range lch {
 			}
-		}
-		defer dlf.Close()
-		dlw := bufio.NewWriter(dlf)
-		for l := range lch {
-			dlw.Write([]byte(l))
-		}
-	}(lch)
+		}()
+	} else {
+		go func(lch <-chan string) {
+			var dlf *os.File
+			if *verbose {
+				dlf = os.Stdout
+			} else {
+				dlf, err = os.Open(os.DevNull)
+				if err != nil {
+					panic(err)
+				}
+			}
+			defer dlf.Close()
+			dlw := bufio.NewWriter(dlf)
+			for l := range lch {
+				dlw.Write([]byte(l))
+			}
+		}(lch)
+	}
 	var action string
 	if flag.NArg() > 0 {
 		action = flag.Arg(0)
@@ -85,7 +93,7 @@ func main() {
 		if flag.NArg() < 2 {
 			exit(1, "missing argument: set <VAL>")
 		}
-		set(d, []byte(flag.Arg(1)), *difficulty)
+		set(d, []byte(flag.Arg(1)), *difficulty, *hashonly)
 		return
 	case "setfile":
 		if flag.NArg() < 2 {
@@ -95,7 +103,7 @@ func main() {
 		if err != nil {
 			exit(2, "error reading file: %v", err)
 		}
-		set(d, data, *difficulty)
+		set(d, data, *difficulty, *hashonly)
 		return
 	case "get":
 		if flag.NArg() < 2 {
@@ -135,26 +143,34 @@ func main() {
 	}
 }
 
-func set(d *godave.Dave, val []byte, difficulty int) {
+func set(d *godave.Dave, val []byte, difficulty int, hashonly bool) {
 	done := make(chan struct{})
-	go func() {
-		ti := time.NewTicker(time.Second)
-		t := time.Now()
-		for {
-			select {
-			case <-done:
-				fmt.Print("\n")
-				return
-			case <-ti.C:
-				fmt.Printf("\rworking for %s\033[0K", jfmt.FmtDuration(time.Since(t)))
+	if hashonly {
+		go func() {
+			<-done
+		}()
+	} else {
+		go func() {
+			ti := time.NewTicker(time.Second)
+			t := time.Now()
+			for {
+				select {
+				case <-done:
+					fmt.Print("\n")
+					return
+				case <-ti.C:
+					fmt.Printf("\rworking for %s\033[0K", jfmt.FmtDuration(time.Since(t)))
+				}
 			}
-		}
-	}()
+		}()
+	}
 	m := &dave.M{Op: dave.Op_DAT, Val: val, Time: godave.Ttb(time.Now())}
 	type sol struct{ work, nonce []byte }
 	solch := make(chan sol)
 	ncpu := max(runtime.NumCPU()-2, 1)
-	fmt.Printf("running on %d cores\n", ncpu)
+	if !hashonly {
+		fmt.Printf("running on %d cores\n", ncpu)
+	}
 	for n := 0; n < ncpu; n++ {
 		go func() {
 			w, n := godave.Work(m.Val, m.Time, difficulty)
@@ -169,12 +185,16 @@ func set(d *godave.Dave, val []byte, difficulty int) {
 	if err != nil {
 		fmt.Printf("failed to set dat: %v\n", err)
 	}
-	printMsg(os.Stdout, m)
-	fmt.Printf("\n%x\n", m.Work)
+	if hashonly {
+		fmt.Printf("%x\n", m.Work)
+	} else {
+		printMsg(os.Stdout, m)
+		fmt.Printf("\n%x\n", m.Work)
+	}
 	if err != nil {
 		exit(1, err.Error())
 	}
-	time.Sleep(time.Second)
+	time.Sleep(300 * time.Millisecond)
 }
 
 func printMsg(w io.Writer, m *dave.M) bool {
