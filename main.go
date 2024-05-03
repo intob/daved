@@ -165,7 +165,7 @@ func set(d *godave.Dave, val []byte, difficulty int, hashonly bool) {
 		}()
 	}
 	m := &dave.M{Op: dave.Op_DAT, Val: val, Time: godave.Ttb(time.Now())}
-	type sol struct{ work, nonce []byte }
+	type sol struct{ work, salt []byte }
 	solch := make(chan sol)
 	ncpu := max(runtime.NumCPU()-2, 1)
 	if !hashonly {
@@ -173,13 +173,13 @@ func set(d *godave.Dave, val []byte, difficulty int, hashonly bool) {
 	}
 	for n := 0; n < ncpu; n++ {
 		go func() {
-			w, n := godave.Work(m.Val, m.Time, difficulty)
-			solch <- sol{w, n}
+			work, salt := godave.Work(m.Val, m.Time, difficulty)
+			solch <- sol{work, salt}
 		}()
 	}
 	s := <-solch
 	m.Work = s.work
-	m.Nonce = s.nonce
+	m.Salt = s.salt
 	done <- struct{}{}
 	err := dapi.SendM(d, m)
 	if err != nil {
@@ -202,7 +202,7 @@ func printMsg(w io.Writer, m *dave.M) bool {
 		return false
 	}
 	if m.Op == dave.Op_DAT {
-		fmt.Fprintf(w, "%s %v %s\n", m.Op, godave.Weight(m.Work, godave.Btt(m.Time)), m.Val)
+		fmt.Fprintf(w, "%s %v %s\n", m.Op, godave.Mass(m.Work, godave.Btt(m.Time)), m.Val)
 	} else {
 		fmt.Fprintf(w, "%s %s\n", m.Op, m.Val)
 	}
