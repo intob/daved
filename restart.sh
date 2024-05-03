@@ -1,8 +1,7 @@
 git pull
-sudo cp -f $1 /etc/systemd/system/dave.service
-/usr/local/go/bin/go work init godave dapi daved
-cd daved && /usr/local/go/bin/go build -o bin/daved && cd ..
-sudo systemctl daemon-reload
-sudo systemctl enable dave.service
-sudo systemctl stop dave.service
-sudo systemctl start dave.service
+sudo cp -f daved_seed.service.conf /etc/systemd/system/daved.service
+/usr/local/go/bin/go build
+systemctl daemon-reload
+systemctl enable daved.service
+systemctl stop daved.service
+systemctl start daved.service
