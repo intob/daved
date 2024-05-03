@@ -6,10 +6,10 @@ github.com/dgryski/go-metro v0.0.0-20211217172704-adc40b04c140 h1:y7y0Oa6UawqTFP
 github.com/dgryski/go-metro v0.0.0-20211217172704-adc40b04c140/go.mod h1:c9O8+fpSOX1DM8cPNSkX/qsBWdkD4yd2dpciOWQjpBw=
 github.com/google/go-cmp v0.5.5 h1:Khx7svrCpmxxtHBq5j2mp/xVjsi8hQMfNLvJFAlrGgU=
 github.com/google/go-cmp v0.5.5/go.mod h1:v8dTdLbMG2kIc/vJvl+f65V22dbkXbowE6jgT/gNBxE=
-github.com/intob/dapi v0.0.0-20240502173751-2173f4146db8 h1:C9Idnw9rG3Wq36C5SlOHvCbtrPWLLw+quPzZfZJjRfE=
-github.com/intob/dapi v0.0.0-20240502173751-2173f4146db8/go.mod h1:tF9FOO7cI3URgFRCEsIO0KNaHkJIHqRkhnMPnTyqvPU=
-github.com/intob/godave v0.0.0-20240502171649-c4026c6f02b3 h1:z2IXGcasQTp6Vdgi8ClE+EVMsiN8QFsBSw/qua3qECM=
-github.com/intob/godave v0.0.0-20240502171649-c4026c6f02b3/go.mod h1:AV0bTSkR4c063pXW0f3dkW6VEI/bSBFIUu4N2aBPgCA=
+github.com/intob/dapi v0.0.2 h1:H2R7vY6KqNXxfho2guFDB8L8VYBLt3NXDuqnjmG0CPY=
+github.com/intob/dapi v0.0.2/go.mod h1:tF9FOO7cI3URgFRCEsIO0KNaHkJIHqRkhnMPnTyqvPU=
+github.com/intob/godave v0.0.13 h1:zreMYz1GfopQFvTxqbO/6byWJP99d/XAYquQJwefS2w=
+github.com/intob/godave v0.0.13/go.mod h1:3nhwF9tsBZjce9oqLWYERAT1Zncp+B47NuVhJGqfRNw=
 github.com/intob/jfmt v0.2.2 h1:+PuFEIY1wYtpIlx6sFxhsqNI6xOXJkPpuobYTWbLrqw=
 github.com/intob/jfmt v0.2.2/go.mod h1:EkQYTlUkTHI0IhTT/1W2QKRVOlt6Ej7YrgxulzAywU8=
 github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZbAQM=

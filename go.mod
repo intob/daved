@@ -3,8 +3,8 @@ module github.com/intob/daved
 go 1.22.1
 
 require (
-	github.com/intob/dapi v0.0.0-20240502173751-2173f4146db8
-	github.com/intob/godave v0.0.0-20240502171649-c4026c6f02b3
+	github.com/intob/dapi v0.0.2
+	github.com/intob/godave v0.0.13
 	github.com/intob/jfmt v0.2.2
 )
 
