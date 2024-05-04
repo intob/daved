@@ -4,7 +4,7 @@ go 1.22.1
 
 require (
 	github.com/intob/dapi v0.0.3
-	github.com/intob/godave v0.0.19
+	github.com/intob/godave v0.0.20
 	github.com/intob/jfmt v0.2.2
 )
 
