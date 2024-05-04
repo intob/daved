@@ -113,7 +113,6 @@ func main() {
 		if err != nil {
 			exit(1, "invalid input <WORK>: %v", err)
 		}
-		dapi.WaitForFirstDat(d, os.Stdout)
 		dat, err := dapi.GetDat(d, work)
 		if err != nil {
 			exit(1, "failed: %v", err)
@@ -164,7 +163,7 @@ func set(d *godave.Dave, val []byte, difficulty int, hashonly bool) {
 			}
 		}()
 	}
-	m := &dave.M{Op: dave.Op_DAT, Val: val, Time: godave.Ttb(time.Now())}
+	m := &dave.M{Op: dave.Op_DAT, V: val, T: godave.Ttb(time.Now())}
 	type sol struct{ work, salt []byte }
 	solch := make(chan sol)
 	ncpu := max(runtime.NumCPU()-2, 1)
@@ -173,23 +172,23 @@ func set(d *godave.Dave, val []byte, difficulty int, hashonly bool) {
 	}
 	for n := 0; n < ncpu; n++ {
 		go func() {
-			work, salt := godave.Work(m.Val, m.Time, difficulty)
+			work, salt := godave.Work(m.V, m.T, difficulty)
 			solch <- sol{work, salt}
 		}()
 	}
 	s := <-solch
-	m.Work = s.work
-	m.Salt = s.salt
+	m.W = s.work
+	m.S = s.salt
 	done <- struct{}{}
 	err := dapi.SendM(d, m)
 	if err != nil {
 		fmt.Printf("failed to set dat: %v\n", err)
 	}
 	if hashonly {
-		fmt.Printf("%x\n", m.Work)
+		fmt.Printf("%x\n", m.W)
 	} else {
 		printMsg(os.Stdout, m)
-		fmt.Printf("\n%x\n", m.Work)
+		fmt.Printf("\n%x\n", m.W)
 	}
 	if err != nil {
 		exit(1, err.Error())
@@ -202,9 +201,9 @@ func printMsg(w io.Writer, m *dave.M) bool {
 		return false
 	}
 	if m.Op == dave.Op_DAT {
-		fmt.Fprintf(w, "%s %v %s\n", m.Op, godave.Mass(m.Work, godave.Btt(m.Time)), m.Val)
+		fmt.Fprintf(w, "%s %v %s\n", m.Op, godave.Mass(m.W, godave.Btt(m.T)), m.V)
 	} else {
-		fmt.Fprintf(w, "%s %s\n", m.Op, m.Val)
+		fmt.Fprintf(w, "%s %s\n", m.Op, m.V)
 	}
 	return true
 }
