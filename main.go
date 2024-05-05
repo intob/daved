@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/intob/godave"
+	"github.com/intob/godave/dave"
 	"github.com/intob/jfmt"
 )
 
@@ -27,9 +28,11 @@ func main() {
 	bap := flag.String("b", "", "bootstrap address:port")
 	dcap := flag.Uint("dc", 500000, "Dat map capacity")
 	fcap := flag.Uint("fc", 100000, "Cuckoo filter capacity")
-	verbose := flag.Bool("v", false, "Verbose logging. Use grep.")
 	difficulty := flag.Int("d", 2, "For set command. Number of leading zeros.")
 	hashonly := flag.Bool("h", false, "For set command. Output only dat hash.")
+	stat := flag.Bool("stat", false, "For get command. Output stats.")
+	all := flag.Bool("all", false, "For get command. Output all dats received.")
+	verbose := flag.Bool("v", false, "Verbose logging. Use grep.")
 	flag.Parse()
 	if *seed {
 		bootstraps = []netip.AddrPort{}
@@ -110,11 +113,27 @@ func main() {
 		if err != nil {
 			exit(1, "invalid input <WORK>: %v", err)
 		}
-		dat := <-d.Get(work, time.Second)
-		if dat == nil {
+		tstart := time.Now()
+		var pass chan *dave.M
+		if *all {
+			pass = make(chan *dave.M, 10)
+			go func() {
+				for m := range pass {
+					fmt.Printf("%s\n", m.V)
+				}
+			}()
+		}
+		var found bool
+		for dat := range d.Get(work, time.Second, pass) {
+			found = true
+			fmt.Println(string(dat.V))
+		}
+		if !found {
 			exit(1, "dat not found")
 		}
-		fmt.Println(string(dat.V))
+		if *stat {
+			fmt.Printf("t: %s\n", time.Since(tstart))
+		}
 		return
 	}
 	if *verbose {
