@@ -26,7 +26,7 @@ func main() {
 	lap := flag.String("l", "[::]:0", "listen address:port")
 	bap := flag.String("b", "", "bootstrap address:port")
 	dcap := flag.Uint("dc", 500000, "Dat map capacity")
-	fcap := flag.Uint("fc", 1000000, "Cuckoo filter capacity")
+	fcap := flag.Uint("fc", 100000, "Cuckoo filter capacity")
 	verbose := flag.Bool("v", false, "Verbose logging. Use grep.")
 	difficulty := flag.Int("d", 2, "For set command. Number of leading zeros.")
 	hashonly := flag.Bool("h", false, "For set command. Output only dat hash.")
@@ -110,7 +110,6 @@ func main() {
 		if err != nil {
 			exit(1, "invalid input <WORK>: %v", err)
 		}
-		time.Sleep(time.Second)
 		dat := <-d.Get(work, time.Second)
 		if dat == nil {
 			exit(1, "dat not found")
@@ -165,16 +164,17 @@ func set(d *godave.Dave, val []byte, difficulty int, hashonly bool) {
 		fmt.Printf("running on %d cores\n", ncpu)
 	}
 	for n := 0; n < ncpu; n++ {
-		go func() {
-			work, salt := godave.Work(dat.V, godave.Ttb(dat.Ti), difficulty)
+		go func(v []byte, ti time.Time) {
+			work, salt := godave.Work(v, godave.Ttb(ti), difficulty)
 			solch <- sol{work, salt}
-		}()
+		}(dat.V, dat.Ti)
 	}
 	s := <-solch
 	dat.W = s.work
 	dat.S = s.salt
 	done <- struct{}{}
 	<-d.Set(*dat)
+	time.Sleep(godave.EPOCH * godave.FANOUT)
 	if hashonly {
 		fmt.Printf("%x\n", dat.W)
 	} else {
