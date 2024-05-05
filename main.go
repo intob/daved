@@ -5,7 +5,6 @@ import (
 	"encoding/hex"
 	"flag"
 	"fmt"
-	"io"
 	"net"
 	"net/netip"
 	"os"
@@ -13,9 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/intob/dapi"
 	"github.com/intob/godave"
-	"github.com/intob/godave/dave"
 	"github.com/intob/jfmt"
 )
 
@@ -113,30 +110,27 @@ func main() {
 		if err != nil {
 			exit(1, "invalid input <WORK>: %v", err)
 		}
-		dat, err := dapi.GetDat(d, work)
-		if err != nil {
-			exit(1, "failed: %v", err)
+		time.Sleep(time.Second)
+		dat := <-d.Get(work, time.Second)
+		if dat == nil {
+			exit(1, "dat not found")
 		}
 		fmt.Println(string(dat.V))
 		return
 	}
-	dapi.WaitForFirstDat(d, os.Stdout)
 	if *verbose {
 		for range d.Recv { // dave logs enough
 		}
 	} else {
 		var i uint64
-		var p uint32
 		ts := time.Now()
 		tick := time.NewTicker(time.Second)
 		for {
 			select {
 			case <-d.Recv:
 				i++
-				p++
 			case <-tick.C:
-				fmt.Printf("\rhandled %s packets in %s (%d/s)\033[0K", jfmt.FmtCount64(i), jfmt.FmtDuration(time.Since(ts)), p)
-				p = 0
+				fmt.Printf("\rhandled %s dats in %s\033[0K", jfmt.FmtCount64(i), jfmt.FmtDuration(time.Since(ts)))
 			}
 		}
 	}
@@ -163,7 +157,7 @@ func set(d *godave.Dave, val []byte, difficulty int, hashonly bool) {
 			}
 		}()
 	}
-	m := &dave.M{Op: dave.Op_DAT, V: val, T: godave.Ttb(time.Now())}
+	dat := &godave.Dat{V: val, Ti: time.Now()}
 	type sol struct{ work, salt []byte }
 	solch := make(chan sol)
 	ncpu := max(runtime.NumCPU()-2, 1)
@@ -172,40 +166,20 @@ func set(d *godave.Dave, val []byte, difficulty int, hashonly bool) {
 	}
 	for n := 0; n < ncpu; n++ {
 		go func() {
-			work, salt := godave.Work(m.V, m.T, difficulty)
+			work, salt := godave.Work(dat.V, godave.Ttb(dat.Ti), difficulty)
 			solch <- sol{work, salt}
 		}()
 	}
 	s := <-solch
-	m.W = s.work
-	m.S = s.salt
+	dat.W = s.work
+	dat.S = s.salt
 	done <- struct{}{}
-	err := dapi.SendM(d, m)
-	if err != nil {
-		fmt.Printf("failed to set dat: %v\n", err)
-	}
+	<-d.Set(*dat)
 	if hashonly {
-		fmt.Printf("%x\n", m.W)
+		fmt.Printf("%x\n", dat.W)
 	} else {
-		printMsg(os.Stdout, m)
-		fmt.Printf("\n%x\n", m.W)
+		fmt.Printf("\nWork: %x\nMass: %x\n", dat.W, godave.Mass(dat.W, dat.Ti))
 	}
-	if err != nil {
-		exit(1, err.Error())
-	}
-	time.Sleep(300 * time.Millisecond)
-}
-
-func printMsg(w io.Writer, m *dave.M) bool {
-	if m.Op == dave.Op_GETPEER || m.Op == dave.Op_PEER {
-		return false
-	}
-	if m.Op == dave.Op_DAT {
-		fmt.Fprintf(w, "%s %v %s\n", m.Op, godave.Mass(m.W, godave.Btt(m.T)), m.V)
-	} else {
-		fmt.Fprintf(w, "%s %s\n", m.Op, m.V)
-	}
-	return true
 }
 
 func exit(code int, msg string, args ...any) {
