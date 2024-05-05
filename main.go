@@ -33,6 +33,7 @@ func main() {
 	stat := flag.Bool("stat", false, "For get command. Output stats.")
 	all := flag.Bool("all", false, "For get command. Output all dats received.")
 	verbose := flag.Bool("v", false, "Verbose logging. Use grep.")
+	flush := flag.Uint64("flush", 1, "Flush log buffer frequency")
 	flag.Parse()
 	if *seed {
 		bootstraps = []netip.AddrPort{}
@@ -51,7 +52,7 @@ func main() {
 	if err != nil {
 		exit(1, "failed to resolve UDP address: %v", err)
 	}
-	lch := make(chan string, 4)
+	lch := make(chan string, 10)
 	d, err := godave.NewDave(&godave.Cfg{
 		Listen:     laddr,
 		Bootstraps: bootstraps,
@@ -79,8 +80,13 @@ func main() {
 			}
 			defer dlf.Close()
 			dlw := bufio.NewWriter(dlf)
+			var n uint64
 			for l := range lch {
+				n++
 				dlw.Write([]byte(l))
+				if n%*flush == 0 {
+					dlw.Flush()
+				}
 			}
 		}(lch)
 	}
@@ -137,8 +143,7 @@ func main() {
 		return
 	}
 	if *verbose {
-		for range d.Recv { // dave logs enough
-		}
+		<-make(chan struct{})
 	} else {
 		var i uint64
 		ts := time.Now()
