@@ -9,8 +9,5 @@ rm go${GO_VERSION}.linux-${ARCH}.tar.gz
 echo "GOROOT=/usr/local/go" >> ~/.profile
 echo "GOPATH=\$HOME/go" >> ~/.profile
 echo "PATH=\$PATH:/usr/local/go/bin:\$GOPATH/bin" >> ~/.profile
-echo "GOROOT=/usr/local/go" >> /etc/profile
-echo "GOPATH=\$HOME/go" >> /etc/profile
-echo "PATH=\$PATH:/usr/local/go/bin:\$GOPATH/bin" >> /etc/profile
 source ~/.profile
 go version
