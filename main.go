@@ -18,14 +18,14 @@ import (
 )
 
 func main() {
-	bootstraps := []netip.AddrPort{
+	edges := []netip.AddrPort{
 		netip.MustParseAddrPort("54.170.214.154:1618"),
 		netip.MustParseAddrPort("3.249.184.30:1618"),
 		netip.MustParseAddrPort("18.200.244.108:1618"),
 	}
-	seed := flag.Bool("s", false, "start as seed, no bootstraps")
-	lap := flag.String("l", "[::]:0", "listen address:port")
-	bap := flag.String("b", "", "bootstrap address:port")
+	edge := flag.Bool("e", false, "Start as edge-node, you'll be alone to begin.")
+	lap := flag.String("l", "[::]:0", "Listen address:port")
+	bap := flag.String("b", "", "Bootstrap address:port")
 	dcap := flag.Uint("dc", 500000, "Dat map capacity")
 	fcap := flag.Uint("fc", 100000, "Cuckoo filter capacity")
 	difficulty := flag.Int("d", 2, "For set command. Number of leading zeros.")
@@ -35,8 +35,8 @@ func main() {
 	verbose := flag.Bool("v", false, "Verbose logging. Use grep.")
 	flush := flag.Uint64("flush", 1, "Flush log buffer frequency")
 	flag.Parse()
-	if *seed {
-		bootstraps = []netip.AddrPort{}
+	if *edge {
+		edges = []netip.AddrPort{}
 	}
 	if *bap != "" {
 		if strings.HasPrefix(*bap, ":") {
@@ -46,7 +46,7 @@ func main() {
 		if err != nil {
 			exit(1, "failed to parse -p=%q: %v", *bap, err)
 		}
-		bootstraps = []netip.AddrPort{addr}
+		edges = []netip.AddrPort{addr}
 	}
 	laddr, err := net.ResolveUDPAddr("udp", *lap)
 	if err != nil {
@@ -54,11 +54,11 @@ func main() {
 	}
 	lch := make(chan string, 10)
 	d, err := godave.NewDave(&godave.Cfg{
-		Listen:     laddr,
-		Bootstraps: bootstraps,
-		DatCap:     *dcap,
-		FilterCap:  *fcap,
-		Log:        lch})
+		Listen:    laddr,
+		Edges:     edges,
+		DatCap:    *dcap,
+		FilterCap: *fcap,
+		Log:       lch})
 	if err != nil {
 		exit(1, "failed to make dave: %v", err)
 	}
