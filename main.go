@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/intob/godave"
-	"github.com/intob/godave/dave"
 	"github.com/intob/jfmt"
 )
 
@@ -23,28 +22,27 @@ func main() {
 		netip.MustParseAddrPort("3.249.184.30:1618"),
 		netip.MustParseAddrPort("18.200.244.108:1618"),
 	}
-	edge := flag.Bool("e", false, "Start as edge-node, you'll be alone to begin.")
+	edgemode := flag.Bool("e", false, "Start as edge-node, you'll be alone to begin.")
 	lap := flag.String("l", "[::]:0", "Listen address:port")
-	bap := flag.String("b", "", "Bootstrap address:port")
+	edge := flag.String("b", "", "Bootstrap address:port")
 	dcap := flag.Uint("dc", 100000, "Dat map capacity")
+	nmsg := flag.Int("n", 1000, "Number of messages to wait for until sending.")
 	difficulty := flag.Int("d", 2, "For set command. Number of leading zeros.")
-	hashonly := flag.Bool("h", false, "For set command. Output only dat hash.")
 	timeout := flag.Duration("t", 10*time.Second, "For get command. Timeout.")
 	stat := flag.Bool("stat", false, "For get command. Output stats.")
-	all := flag.Bool("all", false, "For get command. Output all dats received.")
 	verbose := flag.Bool("v", false, "Verbose logging. Use grep.")
-	flush := flag.Uint64("flush", 1, "Flush log buffer frequency")
+	flush := flag.Bool("flush", false, "Flush log buffer after each write. Not for production.")
 	flag.Parse()
-	if *edge {
+	if *edgemode {
 		edges = []netip.AddrPort{}
 	}
-	if *bap != "" {
-		if strings.HasPrefix(*bap, ":") {
-			*bap = "[::1]" + *bap
+	if *edge != "" {
+		if strings.HasPrefix(*edge, ":") {
+			*edge = "[::1]" + *edge
 		}
-		addr, err := netip.ParseAddrPort(*bap)
+		addr, err := netip.ParseAddrPort(*edge)
 		if err != nil {
-			exit(1, "failed to parse -p=%q: %v", *bap, err)
+			exit(1, "failed to parse -p=%q: %v", *edge, err)
 		}
 		edges = []netip.AddrPort{addr}
 	}
@@ -52,7 +50,10 @@ func main() {
 	if err != nil {
 		exit(1, "failed to resolve UDP address: %v", err)
 	}
-	lch := make(chan string, 10)
+	var lch chan []byte
+	if *verbose {
+		lch = make(chan []byte, 100)
+	}
 	d, err := godave.NewDave(&godave.Cfg{
 		Listen: laddr,
 		Edges:  edges,
@@ -61,30 +62,19 @@ func main() {
 	if err != nil {
 		exit(1, "failed to make dave: %v", err)
 	}
-	if *hashonly {
-		go func() {
-			for range lch {
-			}
-		}()
-	} else {
-		go func(lch <-chan string) {
+	if *verbose {
+		go func(lch <-chan []byte) {
 			var dlf *os.File
 			if *verbose {
 				dlf = os.Stdout
-			} else {
-				dlf, err = os.Open(os.DevNull)
-				if err != nil {
-					panic(err)
-				}
-			}
-			defer dlf.Close()
-			dlw := bufio.NewWriter(dlf)
-			var n uint64
-			for l := range lch {
-				n++
-				dlw.Write([]byte(l))
-				if n%*flush == 0 {
-					dlw.Flush()
+				defer dlf.Close()
+				dlw := bufio.NewWriter(dlf)
+				fl := *flush
+				for l := range lch {
+					dlw.Write(l)
+					if fl {
+						dlw.Flush()
+					}
 				}
 			}
 		}(lch)
@@ -98,7 +88,7 @@ func main() {
 		if flag.NArg() < 2 {
 			exit(1, "missing argument: set <VAL>")
 		}
-		set(d, []byte(flag.Arg(1)), *difficulty, *hashonly)
+		set(d, []byte(flag.Arg(1)), *difficulty, *nmsg)
 		return
 	case "setfile":
 		if flag.NArg() < 2 {
@@ -108,7 +98,7 @@ func main() {
 		if err != nil {
 			exit(2, "error reading file: %v", err)
 		}
-		set(d, data, *difficulty, *hashonly)
+		set(d, data, *difficulty, *nmsg)
 		return
 	case "get":
 		if flag.NArg() < 2 {
@@ -119,17 +109,8 @@ func main() {
 			exit(1, "invalid input <WORK>: %v", err)
 		}
 		tstart := time.Now()
-		var pass chan *dave.M
-		if *all {
-			pass = make(chan *dave.M, 10)
-			go func() {
-				for m := range pass {
-					fmt.Printf("%s\n", m.V)
-				}
-			}()
-		}
 		var found bool
-		for dat := range d.Get(work, *timeout, pass) {
+		for dat := range d.Get(work, *timeout) {
 			found = true
 			fmt.Println(string(dat.V))
 		}
@@ -158,35 +139,27 @@ func main() {
 	}
 }
 
-func set(d *godave.Dave, val []byte, difficulty int, hashonly bool) {
+func set(d *godave.Dave, val []byte, difficulty, nmsg int) {
 	done := make(chan struct{})
-	if hashonly {
-		go func() {
-			<-done
-		}()
-	} else {
-		go func() {
-			ti := time.NewTicker(time.Second)
-			t := time.Now()
-			for {
-				select {
-				case <-done:
-					fmt.Print("\n")
-					return
-				case <-ti.C:
-					fmt.Printf("\rworking for %s\033[0K", jfmt.FmtDuration(time.Since(t)))
-				}
+	go func() {
+		ti := time.NewTicker(time.Second)
+		t := time.Now()
+		for {
+			select {
+			case <-done:
+				return
+			case <-ti.C:
+				fmt.Printf("\rworking for %s\033[0K", jfmt.FmtDuration(time.Since(t)))
 			}
-		}()
-	}
+		}
+	}()
 	dat := &godave.Dat{V: val, Ti: time.Now()}
 	type sol struct{ work, salt []byte }
 	solch := make(chan sol)
 	ncpu := max(runtime.NumCPU()-2, 1)
-	if !hashonly {
-		fmt.Printf("running on %d cores\n", ncpu)
-	}
+	fmt.Printf("hashing with %d cores", ncpu)
 	for n := 0; n < ncpu; n++ {
+		fmt.Print(".")
 		go func(v []byte, ti time.Time) {
 			work, salt := godave.Work(v, godave.Ttb(ti), difficulty)
 			solch <- sol{work, salt}
@@ -196,13 +169,14 @@ func set(d *godave.Dave, val []byte, difficulty int, hashonly bool) {
 	dat.W = s.work
 	dat.S = s.salt
 	done <- struct{}{}
+	fmt.Print("\ncollecting peers...")
+	for i := 0; i < nmsg; i++ {
+		<-d.Recv
+		fmt.Print(".")
+	}
 	<-d.Set(*dat)
 	time.Sleep(godave.EPOCH * godave.FANOUT)
-	if hashonly {
-		fmt.Printf("%x\n", dat.W)
-	} else {
-		fmt.Printf("\nWork: %x\nMass: %x\n", dat.W, godave.Mass(dat.W, dat.Ti))
-	}
+	fmt.Printf("\nWork: %x\nMass: %x\n", dat.W, godave.Mass(dat.W, dat.Ti))
 }
 
 func exit(code int, msg string, args ...any) {
