@@ -27,7 +27,6 @@ func main() {
 	lap := flag.String("l", "[::]:0", "Listen address:port")
 	bap := flag.String("b", "", "Bootstrap address:port")
 	dcap := flag.Uint("dc", 500000, "Dat map capacity")
-	fcap := flag.Uint("fc", 100000, "Cuckoo filter capacity")
 	difficulty := flag.Int("d", 2, "For set command. Number of leading zeros.")
 	hashonly := flag.Bool("h", false, "For set command. Output only dat hash.")
 	stat := flag.Bool("stat", false, "For get command. Output stats.")
@@ -54,11 +53,10 @@ func main() {
 	}
 	lch := make(chan string, 10)
 	d, err := godave.NewDave(&godave.Cfg{
-		Listen:    laddr,
-		Edges:     edges,
-		DatCap:    *dcap,
-		FilterCap: *fcap,
-		Log:       lch})
+		Listen: laddr,
+		Edges:  edges,
+		DatCap: *dcap,
+		Log:    lch})
 	if err != nil {
 		exit(1, "failed to make dave: %v", err)
 	}
