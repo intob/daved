@@ -27,7 +27,7 @@ func main() {
 	lap := flag.String("l", "[::]:0", "Listen address:port")
 	bap := flag.String("b", "", "Bootstrap address:port")
 	dcap := flag.Uint("dc", 100000, "Dat map capacity")
-	difficulty := flag.Int("d", godave.MINWORK, "For set command. Number of leading zeros.")
+	difficulty := flag.Int("d", 2, "For set command. Number of leading zeros.")
 	hashonly := flag.Bool("h", false, "For set command. Output only dat hash.")
 	timeout := flag.Duration("t", 10*time.Second, "For get command. Timeout.")
 	stat := flag.Bool("stat", false, "For get command. Output stats.")
