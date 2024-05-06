@@ -3,7 +3,7 @@ module github.com/intob/daved
 go 1.22.1
 
 require (
-	github.com/intob/godave v0.0.28
+	github.com/intob/godave v0.0.29
 	github.com/intob/jfmt v0.2.2
 )
 
