@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/intob/godave"
+	"github.com/intob/godave/dave"
 	"github.com/intob/jfmt"
 )
 
@@ -23,10 +24,10 @@ func main() {
 		netip.MustParseAddrPort("18.200.244.108:1618"),
 	}
 	edgemode := flag.Bool("e", false, "Start as edge-node, you'll be alone to begin.")
-	lap := flag.String("l", "[::]:0", "Listen address:port")
+	lap := flag.String("l", "[::]:1618", "Listen address:port")
 	edge := flag.String("b", "", "Bootstrap address:port")
 	dcap := flag.Uint("dc", 100000, "Dat map capacity")
-	nmsg := flag.Int("n", 1000, "Number of messages to wait for until sending.")
+	npeer := flag.Int("n", 20*godave.NPEER, "For set command. Number of peers to collect before sending.")
 	difficulty := flag.Int("d", 2, "For set command. Number of leading zeros.")
 	timeout := flag.Duration("t", 10*time.Second, "For get command. Timeout.")
 	stat := flag.Bool("stat", false, "For get command. Output stats.")
@@ -88,7 +89,7 @@ func main() {
 		if flag.NArg() < 2 {
 			exit(1, "missing argument: set <VAL>")
 		}
-		set(d, []byte(flag.Arg(1)), *difficulty, *nmsg)
+		set(d, []byte(flag.Arg(1)), *difficulty, *npeer)
 		return
 	case "setfile":
 		if flag.NArg() < 2 {
@@ -98,7 +99,7 @@ func main() {
 		if err != nil {
 			exit(2, "error reading file: %v", err)
 		}
-		set(d, data, *difficulty, *nmsg)
+		set(d, data, *difficulty, *npeer)
 		return
 	case "get":
 		if flag.NArg() < 2 {
@@ -139,7 +140,7 @@ func main() {
 	}
 }
 
-func set(d *godave.Dave, val []byte, difficulty, nmsg int) {
+func set(d *godave.Dave, val []byte, difficulty, npeer int) {
 	done := make(chan struct{})
 	go func() {
 		ti := time.NewTicker(time.Second)
@@ -150,6 +151,19 @@ func set(d *godave.Dave, val []byte, difficulty, nmsg int) {
 				return
 			case <-ti.C:
 				fmt.Printf("\rworking for %s\033[0K", jfmt.FmtDuration(time.Since(t)))
+			}
+		}
+	}()
+	ready := make(chan struct{})
+	go func() {
+		var n int
+		for m := range d.Recv {
+			if m.Op == dave.Op_PEER {
+				n++
+				if n >= npeer {
+					ready <- struct{}{}
+					return
+				}
 			}
 		}
 	}()
@@ -169,11 +183,8 @@ func set(d *godave.Dave, val []byte, difficulty, nmsg int) {
 	dat.W = s.work
 	dat.S = s.salt
 	done <- struct{}{}
-	fmt.Print("\ncollecting peers...")
-	for i := 0; i < nmsg; i++ {
-		<-d.Recv
-		fmt.Print(".")
-	}
+	fmt.Printf("\ncollecting peers...")
+	<-ready
 	<-d.Set(*dat)
 	time.Sleep(godave.EPOCH * godave.FANOUT)
 	fmt.Printf("\nWork: %x\nMass: %x\n", dat.W, godave.Mass(dat.W, dat.Ti))
