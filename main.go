@@ -29,6 +29,7 @@ func main() {
 	dcap := flag.Uint("dc", 500000, "Dat map capacity")
 	difficulty := flag.Int("d", 2, "For set command. Number of leading zeros.")
 	hashonly := flag.Bool("h", false, "For set command. Output only dat hash.")
+	timeout := flag.Duration("t", 10*time.Second, "For get command. Timeout.")
 	stat := flag.Bool("stat", false, "For get command. Output stats.")
 	all := flag.Bool("all", false, "For get command. Output all dats received.")
 	verbose := flag.Bool("v", false, "Verbose logging. Use grep.")
@@ -128,7 +129,7 @@ func main() {
 			}()
 		}
 		var found bool
-		for dat := range d.Get(work, time.Second, pass) {
+		for dat := range d.Get(work, *timeout, pass) {
 			found = true
 			fmt.Println(string(dat.V))
 		}
