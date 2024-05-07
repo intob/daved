@@ -1,6 +1,6 @@
 #!/bin/bash
 set -e
-echo "BUILDING FOR LINUX $1"
+echo "Building for $1 $2..."
 rm commit
 git rev-parse HEAD > commit
-GOARCH=$1 GOOS=linux go build -o daved
+GOOS=$1 GOARCH=$2 go build -o daved
