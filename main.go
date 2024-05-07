@@ -34,7 +34,7 @@ func main() {
 	lap := flag.String("l", "[::]:1618", "Listen address:port")
 	edge := flag.String("b", "", "Bootstrap address:port")
 	dcap := flag.Uint("dc", 100000, "Dat map capacity")
-	npeer := flag.Int("n", 20*godave.NPEER, "For set command. Number of peers to collect before sending.")
+	npeer := flag.Int("n", 50*godave.NPEER, "For set command. Number of peers to collect before sending.")
 	difficulty := flag.Int("d", 2, "For set command. Number of leading zeros.")
 	timeout := flag.Duration("t", 10*time.Second, "For get command. Timeout.")
 	stat := flag.Bool("stat", false, "For get command. Output stats.")
@@ -77,7 +77,6 @@ func main() {
 			}
 		}(lch)
 	} else {
-		fmt.Printf("%scommit %s\n", splash, commit)
 	}
 	d, err := godave.NewDave(&godave.Cfg{
 		Listen: laddr,
@@ -92,6 +91,9 @@ func main() {
 		action = flag.Arg(0)
 	}
 	switch strings.ToLower(action) {
+	case "version":
+		fmt.Printf("%scommit %s\n", splash, commit)
+		return
 	case "set":
 		if flag.NArg() < 2 {
 			exit(1, "missing argument: set <VAL>")
@@ -133,6 +135,7 @@ func main() {
 	if *verbose {
 		<-make(chan struct{})
 	} else {
+		fmt.Printf("%scommit %s\n", splash, commit)
 		var i uint64
 		ts := time.Now()
 		tick := time.NewTicker(time.Second)
@@ -164,13 +167,22 @@ func set(d *godave.Dave, val []byte, difficulty, npeer int) {
 	ready := make(chan struct{})
 	go func() {
 		var n int
-		for m := range d.Recv {
-			if m.Op == dave.Op_PEER {
-				n++
-				if n >= npeer {
-					ready <- struct{}{}
-					return
+		var printout bool
+		for {
+			select {
+			case m := <-d.Recv:
+				if m.Op == dave.Op_PEER {
+					if printout {
+						fmt.Print(".")
+					}
+					n++
+					if n >= npeer {
+						ready <- struct{}{}
+						return
+					}
 				}
+			case <-done:
+				printout = true
 			}
 		}
 	}()
@@ -189,6 +201,7 @@ func set(d *godave.Dave, val []byte, difficulty, npeer int) {
 	s := <-solch
 	dat.W = s.work
 	dat.S = s.salt
+	done <- struct{}{}
 	done <- struct{}{}
 	fmt.Printf("\ncollecting peers...")
 	<-ready
