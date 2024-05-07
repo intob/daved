@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	_ "embed"
 	"encoding/hex"
 	"flag"
 	"fmt"
@@ -16,6 +17,12 @@ import (
 	"github.com/intob/godave/dave"
 	"github.com/intob/jfmt"
 )
+
+//go:embed splash
+var splash string
+
+//go:embed commit
+var commit string
 
 func main() {
 	edges := []netip.AddrPort{
@@ -54,16 +61,6 @@ func main() {
 	var lch chan []byte
 	if *verbose {
 		lch = make(chan []byte, 100)
-	}
-	d, err := godave.NewDave(&godave.Cfg{
-		Listen: laddr,
-		Edges:  edges,
-		DatCap: *dcap,
-		Log:    lch})
-	if err != nil {
-		exit(1, "failed to make dave: %v", err)
-	}
-	if *verbose {
 		go func(lch <-chan []byte) {
 			var dlf *os.File
 			if *verbose {
@@ -79,6 +76,16 @@ func main() {
 				}
 			}
 		}(lch)
+	} else {
+		fmt.Printf("%scommit %s\n", splash, commit)
+	}
+	d, err := godave.NewDave(&godave.Cfg{
+		Listen: laddr,
+		Edges:  edges,
+		DatCap: *dcap,
+		Log:    lch})
+	if err != nil {
+		exit(1, "failed to make dave: %v", err)
 	}
 	var action string
 	if flag.NArg() > 0 {

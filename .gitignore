@@ -1,5 +1,3 @@
 .vscode/launch.json
-go.work
-run.sh
-update*.sh
 hostnames_*
+commit
