@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"github.com/intob/godave"
-	"github.com/intob/godave/dave"
 	"github.com/intob/jfmt"
 )
 
@@ -164,28 +163,6 @@ func set(d *godave.Dave, val []byte, difficulty, npeer int) {
 			}
 		}
 	}()
-	ready := make(chan struct{})
-	go func() {
-		var n int
-		var printout bool
-		for {
-			select {
-			case m := <-d.Recv:
-				if m.Op == dave.Op_PEER {
-					if printout {
-						fmt.Print(".")
-					}
-					n++
-					if n >= npeer {
-						ready <- struct{}{}
-						return
-					}
-				}
-			case <-done:
-				printout = true
-			}
-		}
-	}()
 	dat := &godave.Dat{V: val, Ti: time.Now()}
 	type sol struct{ work, salt []byte }
 	solch := make(chan sol)
@@ -202,11 +179,7 @@ func set(d *godave.Dave, val []byte, difficulty, npeer int) {
 	dat.W = s.work
 	dat.S = s.salt
 	done <- struct{}{}
-	done <- struct{}{}
-	fmt.Printf("\ncollecting peers...")
-	<-ready
 	<-d.Set(*dat)
-	time.Sleep(godave.EPOCH * godave.FANOUT)
 	fmt.Printf("\nWork: %x\nMass: %x\n", dat.W, godave.Mass(dat.W, dat.Ti))
 }
 
