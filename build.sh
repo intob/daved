@@ -1,4 +1,5 @@
 #!/bin/bash
+set -e
 echo "BUILDING FOR LINUX $1"
 rm commit
 git rev-parse HEAD > commit
