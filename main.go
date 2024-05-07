@@ -33,7 +33,6 @@ func main() {
 	lap := flag.String("l", "[::]:1618", "Listen address:port")
 	edge := flag.String("b", "", "Bootstrap address:port")
 	dcap := flag.Uint("dc", 100000, "Dat map capacity")
-	npeer := flag.Int("n", 50*godave.NPEER, "For set command. Number of peers to collect before sending.")
 	difficulty := flag.Int("d", 2, "For set command. Number of leading zeros.")
 	timeout := flag.Duration("t", 10*time.Second, "For get command. Timeout.")
 	stat := flag.Bool("stat", false, "For get command. Output stats.")
@@ -97,7 +96,7 @@ func main() {
 		if flag.NArg() < 2 {
 			exit(1, "missing argument: set <VAL>")
 		}
-		set(d, []byte(flag.Arg(1)), *difficulty, *npeer)
+		set(d, []byte(flag.Arg(1)), *difficulty)
 		return
 	case "setfile":
 		if flag.NArg() < 2 {
@@ -107,7 +106,7 @@ func main() {
 		if err != nil {
 			exit(2, "error reading file: %v", err)
 		}
-		set(d, data, *difficulty, *npeer)
+		set(d, data, *difficulty)
 		return
 	case "get":
 		if flag.NArg() < 2 {
@@ -149,7 +148,7 @@ func main() {
 	}
 }
 
-func set(d *godave.Dave, val []byte, difficulty, npeer int) {
+func set(d *godave.Dave, val []byte, difficulty int) {
 	done := make(chan struct{})
 	go func() {
 		ti := time.NewTicker(time.Second)
