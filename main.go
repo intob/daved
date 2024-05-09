@@ -24,11 +24,7 @@ var splash string
 var commit string
 
 func main() {
-	edges := []netip.AddrPort{
-		netip.MustParseAddrPort("54.170.214.154:1618"),
-		netip.MustParseAddrPort("3.249.184.30:1618"),
-		netip.MustParseAddrPort("18.200.244.108:1618"),
-	}
+	edges := []netip.AddrPort{}
 	edgemode := flag.Bool("e", false, "Start as edge-node, you'll be alone to begin.")
 	lap := flag.String("l", "[::]:1618", "Listen address:port")
 	edge := flag.String("b", "", "Bootstrap address:port")
@@ -76,11 +72,7 @@ func main() {
 		}(lch)
 	} else {
 	}
-	d, err := godave.NewDave(&godave.Cfg{
-		Listen: laddr,
-		Edges:  edges,
-		DatCap: *dcap,
-		Log:    lch})
+	d, err := godave.NewDave(&godave.Cfg{Listen: laddr, Edges: edges, DatCap: *dcap, Log: lch})
 	if err != nil {
 		exit(1, "failed to make dave: %v", err)
 	}
