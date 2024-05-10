@@ -1,3 +1,4 @@
+// Public domain.
 package main
 
 import (
