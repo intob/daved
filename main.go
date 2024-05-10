@@ -26,9 +26,9 @@ var commit string
 func main() {
 	edges := []netip.AddrPort{}
 	edgemode := flag.Bool("e", false, "Start as edge-node, you'll be alone to begin.")
-	lap := flag.String("l", "[::]:1618", "Listen address:port")
-	edge := flag.String("b", "", "Bootstrap address:port")
-	dcap := flag.Uint("dc", 100000, "Dat map capacity")
+	laddrstr := flag.String("l", "[::]:1618", "Listen address:port")
+	bootstrap := flag.String("b", "", "Bootstrap address:port")
+	dcap := flag.Uint("c", 100000, "Dat map capacity")
 	difficulty := flag.Int("d", 2, "For set command. Number of leading zeros.")
 	timeout := flag.Duration("t", 10*time.Second, "For get command. Timeout.")
 	stat := flag.Bool("stat", false, "For get command. Output stats.")
@@ -38,19 +38,19 @@ func main() {
 	if *edgemode {
 		edges = []netip.AddrPort{}
 	}
-	if *edge != "" {
-		if strings.HasPrefix(*edge, ":") {
-			*edge = "[::1]" + *edge
+	if *bootstrap != "" {
+		if strings.HasPrefix(*bootstrap, ":") {
+			*bootstrap = "[::1]" + *bootstrap
 		}
-		addr, err := netip.ParseAddrPort(*edge)
+		addr, err := netip.ParseAddrPort(*bootstrap)
 		if err != nil {
-			exit(1, "failed to parse -p=%q: %v", *edge, err)
+			exit(1, "failed to parse bootstrap addr -b=%q: %v", *bootstrap, err)
 		}
 		edges = []netip.AddrPort{addr}
 	}
-	laddr, err := net.ResolveUDPAddr("udp", *lap)
+	laddr, err := net.ResolveUDPAddr("udp", *laddrstr)
 	if err != nil {
-		exit(1, "failed to resolve UDP address: %v", err)
+		exit(1, "failed to resolve UDP listen address: %v", err)
 	}
 	var lch chan []byte
 	if *verbose {
@@ -70,8 +70,8 @@ func main() {
 				}
 			}
 		}(lch)
-	} else {
 	}
+	fmt.Printf("")
 	d, err := godave.NewDave(&godave.Cfg{Listen: laddr, Edges: edges, DatCap: *dcap, Log: lch})
 	if err != nil {
 		exit(1, "failed to make dave: %v", err)
@@ -82,7 +82,7 @@ func main() {
 	}
 	switch strings.ToLower(action) {
 	case "version":
-		fmt.Printf("%scommit %s\n", splash, commit)
+		fmt.Printf("%s commit %s\n", splash, commit)
 		return
 	case "set":
 		if flag.NArg() < 2 {
@@ -90,9 +90,9 @@ func main() {
 		}
 		set(d, []byte(flag.Arg(1)), *difficulty)
 		return
-	case "setfile":
+	case "setf":
 		if flag.NArg() < 2 {
-			exit(1, "missing argument: setfile <FILENAME>")
+			exit(1, "missing argument: setf <FILENAME>")
 		}
 		data, err := os.ReadFile(flag.Arg(1))
 		if err != nil {
@@ -125,7 +125,7 @@ func main() {
 	if *verbose {
 		<-make(chan struct{})
 	} else {
-		fmt.Printf("%scommit %s\n", splash, commit)
+		fmt.Printf("%s commit %s\n", splash, commit)
 		var i uint64
 		ts := time.Now()
 		tick := time.NewTicker(time.Second)
