@@ -24,30 +24,17 @@ var splash string
 var commit string
 
 func main() {
-	edges := []netip.AddrPort{}
-	edgemode := flag.Bool("e", false, "Start as edge-node, you'll be alone to begin.")
 	laddrstr := flag.String("l", "[::]:1618", "Listen address:port")
-	bootstrap := flag.String("b", "", "Bootstrap address:port")
+	edge := flag.String("e", "", "Edge bootstrap address:port")
 	dcap := flag.Uint("c", 100000, "Dat map capacity")
+	fcap := flag.Uint("f", 10000, "Cuckoo filter capacity. 10K (default) or 100K should be good ;)")
 	difficulty := flag.Int("d", 2, "For set command. Number of leading zeros.")
-	timeout := flag.Duration("t", 10*time.Second, "For get command. Timeout.")
-	stat := flag.Bool("stat", false, "For get command. Output stats.")
+	n := flag.Int("n", 1, "For set command. Write n times.")
+	timeout := flag.Duration("t", 3*time.Second, "For get command. Timeout.")
+	stat := flag.Bool("s", false, "For get command. Output performance measurements.")
 	verbose := flag.Bool("v", false, "Verbose logging. Use grep.")
-	flush := flag.Bool("flush", false, "Flush log buffer after each write. Not for production.")
+	flush := flag.Bool("f", false, "Flush log buffer after each write.")
 	flag.Parse()
-	if *edgemode {
-		edges = []netip.AddrPort{}
-	}
-	if *bootstrap != "" {
-		if strings.HasPrefix(*bootstrap, ":") {
-			*bootstrap = "[::1]" + *bootstrap
-		}
-		addr, err := netip.ParseAddrPort(*bootstrap)
-		if err != nil {
-			exit(1, "failed to parse bootstrap addr -b=%q: %v", *bootstrap, err)
-		}
-		edges = []netip.AddrPort{addr}
-	}
 	laddr, err := net.ResolveUDPAddr("udp", *laddrstr)
 	if err != nil {
 		exit(1, "failed to resolve UDP listen address: %v", err)
@@ -57,22 +44,31 @@ func main() {
 		lch = make(chan []byte, 100)
 		go func(lch <-chan []byte) {
 			var dlf *os.File
-			if *verbose {
-				dlf = os.Stdout
-				defer dlf.Close()
-				dlw := bufio.NewWriter(dlf)
-				fl := *flush
-				for l := range lch {
-					dlw.Write(l)
-					if fl {
-						dlw.Flush()
-					}
+			dlf = os.Stdout
+			defer dlf.Close()
+			dlw := bufio.NewWriter(dlf)
+			fl := *flush
+			for l := range lch {
+				dlw.Write(l)
+				if fl {
+					dlw.Flush()
 				}
 			}
 		}(lch)
 	}
-	fmt.Printf("")
-	d, err := godave.NewDave(&godave.Cfg{Listen: laddr, Edges: edges, DatCap: *dcap, Log: lch})
+	edges := []netip.AddrPort{}
+	if *edge != "" {
+		if strings.HasPrefix(*edge, ":") {
+			*edge = "[::1]" + *edge
+		}
+		addr, err := netip.ParseAddrPort(*edge)
+		if err != nil {
+			exit(1, "failed to parse edge bootstrap addr -e=%q: %v", edge, err)
+		}
+		edges = append(edges, addr)
+	}
+	fmt.Printf("listening on %s, edges: %+v\n", laddr.String(), edges)
+	d, err := godave.NewDave(&godave.Cfg{LstnAddr: laddr, Edges: edges, DatCap: *dcap, FilterCap: *fcap, Log: lch})
 	if err != nil {
 		exit(1, "failed to make dave: %v", err)
 	}
@@ -80,7 +76,7 @@ func main() {
 	if flag.NArg() > 0 {
 		action = flag.Arg(0)
 	}
-	switch strings.ToLower(action) {
+	switch action {
 	case "version":
 		fmt.Printf("%s commit %s\n", splash, commit)
 		return
@@ -88,7 +84,9 @@ func main() {
 		if flag.NArg() < 2 {
 			exit(1, "missing argument: set <VAL>")
 		}
-		set(d, []byte(flag.Arg(1)), *difficulty)
+		for i := 0; i < *n; i++ {
+			set(d, []byte(flag.Arg(1)), *difficulty, *n)
+		}
 		return
 	case "setf":
 		if flag.NArg() < 2 {
@@ -98,7 +96,9 @@ func main() {
 		if err != nil {
 			exit(2, "error reading file: %v", err)
 		}
-		set(d, data, *difficulty)
+		for i := 0; i < *n; i++ {
+			set(d, data, *difficulty, *n)
+		}
 		return
 	case "get":
 		if flag.NArg() < 2 {
@@ -140,7 +140,7 @@ func main() {
 	}
 }
 
-func set(d *godave.Dave, val []byte, difficulty int) {
+func set(d *godave.Dave, val []byte, difficulty, n int) {
 	done := make(chan struct{})
 	go func() {
 		ti := time.NewTicker(time.Second)
@@ -154,24 +154,33 @@ func set(d *godave.Dave, val []byte, difficulty int) {
 			}
 		}
 	}()
-	dat := &godave.Dat{V: val, Ti: time.Now()}
-	type sol struct{ work, salt []byte }
-	solch := make(chan sol)
-	ncpu := max(runtime.NumCPU()-2, 1)
-	fmt.Printf("hashing with %d cores", ncpu)
-	for n := 0; n < ncpu; n++ {
-		fmt.Print(".")
-		go func(v []byte, ti time.Time) {
-			work, salt := godave.Work(v, godave.Ttb(ti), difficulty)
-			solch <- sol{work, salt}
-		}(dat.V, dat.Ti)
+	type chal struct {
+		v  []byte
+		ti time.Time
 	}
-	s := <-solch
-	dat.W = s.work
-	dat.S = s.salt
+	type sol struct{ work, salt []byte }
+	chalch := make(chan chal, 1)
+	solch := make(chan sol, 1)
+	ncpu := max(runtime.NumCPU()-1, 1)
+	fmt.Printf("hashing with %d cores", ncpu)
+	for nroutine := 0; nroutine < ncpu; nroutine++ {
+		go func(chalch <-chan chal) {
+			for c := range chalch {
+				work, salt := godave.Work(c.v, godave.Ttb(c.ti), difficulty)
+				solch <- sol{work, salt}
+			}
+		}(chalch)
+	}
+	for i := 0; i < n; i++ {
+		dat := &godave.Dat{V: val, Ti: time.Now()}
+		chalch <- chal{dat.V, dat.Ti}
+		s := <-solch
+		dat.W = s.work
+		dat.S = s.salt
+		fmt.Printf("\nWork: %x\nMass: %x\n", dat.W, godave.Mass(dat.W, dat.Ti))
+		<-d.Set(*dat)
+	}
 	done <- struct{}{}
-	<-d.Set(*dat)
-	fmt.Printf("\nWork: %x\nMass: %x\n", dat.W, godave.Mass(dat.W, dat.Ti))
 }
 
 func exit(code int, msg string, args ...any) {
