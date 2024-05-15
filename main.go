@@ -27,11 +27,17 @@ var commit string
 func main() {
 	laddrstr := flag.String("l", "[::]:1618", "Listen address:port")
 	edge := flag.String("e", "", "Edge bootstrap address:port")
-	dcap := flag.Uint("c", 100000, "Dat map capacity")
-	fcap := flag.Uint("f", 10000, "Cuckoo filter capacity. 10K (default) or 100K should be good ;)")
+	epoch := flag.Duration("epoch", 20*time.Microsecond, "Base cycle period. Reduce to increase bandwidth usage.")
+	dcap := flag.Uint("dcap", 100000, "Dat map capacity")
+	fcap := flag.Uint("fcap", 10000, "Cuckoo filter capacity. 10K (default) or 100K should be good ;)")
+	pull := flag.Uint64("pull", 0, "Interval between pulling a random dat from a random peer (optional anonymity)")
+	prune := flag.Uint64("prune", 50000, "Interval between refreshing dat & peer maps")
 	difficulty := flag.Int("d", 2, "For set command. Number of leading zeros.")
-	n := flag.Int("n", 1, "For set command. Write n times.")
+	rounds := flag.Int("rounds", 9, "For set command. Number of times to repeat sending dat.")
+	npeer := flag.Int("npeer", 64, "Number of peer messages to collect before sending dat.")
+	ntest := flag.Int("ntest", 1, "For set command. Repeat work & send n times. For testing.")
 	timeout := flag.Duration("t", 3*time.Second, "For get command. Timeout.")
+	retry := flag.Duration("r", 100*time.Millisecond, "For get command. Interval between sending GET messages.")
 	stat := flag.Bool("s", false, "For get command. Output performance measurements.")
 	verbose := flag.Bool("v", false, "Verbose logging. Use grep.")
 	flush := flag.Bool("f", false, "Flush log buffer after each write.")
@@ -69,7 +75,7 @@ func main() {
 		edges = append(edges, addr)
 	}
 	fmt.Printf("listening on %s, edges: %+v\n", laddr.String(), edges)
-	d, err := godave.NewDave(&godave.Cfg{LstnAddr: laddr, Edges: edges, DatCap: *dcap, FilterCap: *fcap, Log: lch})
+	d, err := godave.NewDave(&godave.Cfg{LstnAddr: laddr, Edges: edges, Epoch: *epoch, DatCap: *dcap, FilterCap: *fcap, Pull: *pull, Prune: *prune, Log: lch})
 	if err != nil {
 		exit(1, "failed to make dave: %v", err)
 	}
@@ -85,9 +91,7 @@ func main() {
 		if flag.NArg() < 2 {
 			exit(1, "missing argument: set <VAL>")
 		}
-		for i := 0; i < *n; i++ {
-			set(d, []byte(flag.Arg(1)), *difficulty, *n)
-		}
+		set(d, []byte(flag.Arg(1)), *difficulty, *rounds, *npeer, *ntest)
 		return
 	case "setf":
 		if flag.NArg() < 2 {
@@ -97,9 +101,7 @@ func main() {
 		if err != nil {
 			exit(2, "error reading file: %v", err)
 		}
-		for i := 0; i < *n; i++ {
-			set(d, data, *difficulty, *n)
-		}
+		set(d, data, *difficulty, *rounds, *npeer, *ntest)
 		return
 	case "get":
 		if flag.NArg() < 2 {
@@ -111,7 +113,7 @@ func main() {
 		}
 		tstart := time.Now()
 		var found bool
-		for dat := range d.Get(work, *timeout) {
+		for dat := range d.Get(work, *timeout, *retry) {
 			found = true
 			fmt.Println(string(dat.V))
 		}
@@ -141,7 +143,7 @@ func main() {
 	}
 }
 
-func set(d *godave.Dave, val []byte, difficulty, n int) {
+func set(d *godave.Dave, val []byte, difficulty, rounds, npeer, ntest int) {
 	done := make(chan struct{})
 	go func() {
 		ti := time.NewTicker(time.Second)
@@ -172,16 +174,17 @@ func set(d *godave.Dave, val []byte, difficulty, n int) {
 			}
 		}(chalch)
 	}
-	for i := 0; i < n; i++ {
+	for i := 0; i < ntest; i++ {
 		dat := &godave.Dat{V: val, Ti: time.Now()}
 		chalch <- chal{dat.V, dat.Ti}
 		s := <-solch
 		dat.W = s.work
 		dat.S = s.salt
 		fmt.Printf("\nWork: %x\nMass: %x\n", dat.W, godave.Mass(dat.W, dat.Ti))
-		<-d.Set(*dat)
+		<-d.Set(*dat, rounds, npeer)
 	}
 	done <- struct{}{}
+	fmt.Println("YOOOOOOOO!")
 }
 
 func exit(code int, msg string, args ...any) {

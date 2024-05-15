@@ -1,22 +1,24 @@
-Public domaian.
-
-Daved is a command-line interface for basic interaction with a dave network.
+Daved is a command-line interface for basic interaction with a dave network. You may join any dave network by entering the ip:port with the -e :
 
 The default operating mode is running as a node, participating in network gossip. It will listen for dats, as they are gossipped randomly through the network, relaying them as in the protocol spec.
 
 When running multiple instances of daved on one ip-address, random ports will often cause packet filter collisions (port is hashed using a 4-bit hash). I suggest using pre-defined ports with -l in this case.
 
 Arguments, followed by default values:
--l [::]:0               Listen ip address and port (listen on every interface, on a random available port)
--b :1992                Bootstrap to port (local machine inferred)
--b 3.255.246.69:1618    Bootstrap to ip:port
--e                      Start as seed node. Off by default.
--c 500000               Capacity of dat map held in memory.
--v                      Verbose logging, grep by log path prefix.
--d 2                    For set command. Difficulty of poof-of-work.
+-l [::]:127             Listen ip address and port (listen on every interface, on port 127)
+-e :2001            Bootstrap to port, local machine inferred
+-e 3.7.13.31:37     Bootstrap to ip:port
+-c 500000           Capacity of dat map held in memory.
+-f 10000            Cuckoo filter capacity.
+-v                  Verbose logging, grep by log path prefix.
+-d 2                For set command. Difficulty of poof-of-work. Number of leading zero bytes in work hash.
 
-Try:
-daved
+Try dave on your machine by starting multiple daves! ;)
+
+Open 3 terminals, and run: daveda
+
+
+
 daved -v | grep /d/pr
 
 Or:
