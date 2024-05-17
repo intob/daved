@@ -18,9 +18,6 @@ import (
 	"github.com/intob/jfmt"
 )
 
-//go:embed splash
-var splash string
-
 //go:embed commit
 var commit string
 
@@ -85,7 +82,7 @@ func main() {
 	}
 	switch action {
 	case "version":
-		fmt.Printf("%s commit %s\n", splash, commit)
+		fmt.Printf("commit %s\n", commit)
 		return
 	case "set":
 		if flag.NArg() < 2 {
@@ -128,7 +125,7 @@ func main() {
 	if *verbose {
 		<-make(chan struct{})
 	} else {
-		fmt.Printf("%s commit %s\n", splash, commit)
+		fmt.Printf("commit %s\n", commit)
 		var i uint64
 		ts := time.Now()
 		tick := time.NewTicker(time.Second)
