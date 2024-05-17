@@ -181,7 +181,6 @@ func set(d *godave.Dave, val []byte, difficulty, rounds, npeer, ntest int) {
 		<-d.Set(*dat, rounds, npeer)
 	}
 	done <- struct{}{}
-	fmt.Println("YOOOOOOOO!")
 }
 
 func exit(code int, msg string, args ...any) {
