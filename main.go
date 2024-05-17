@@ -29,11 +29,11 @@ func main() {
 	fcap := flag.Uint("fcap", 10000, "Cuckoo filter capacity. 10K (default) or 100K should be good ;)")
 	pull := flag.Uint64("pull", 0, "Interval between pulling a random dat from a random peer (optional anonymity)")
 	prune := flag.Uint64("prune", 50000, "Interval between refreshing dat & peer maps")
-	difficulty := flag.Int("d", 2, "For set command. Number of leading zeros.")
+	difficulty := flag.Int("d", 32, "For set command. Number of leading zero bits.")
 	rounds := flag.Int("rounds", 9, "For set command. Number of times to repeat sending dat.")
 	npeer := flag.Int("npeer", 64, "Number of peer messages to collect before sending dat.")
 	ntest := flag.Int("ntest", 1, "For set command. Repeat work & send n times. For testing.")
-	timeout := flag.Duration("t", 3*time.Second, "For get command. Timeout.")
+	timeout := flag.Duration("t", 5*time.Second, "For get command. Timeout.")
 	retry := flag.Duration("r", 100*time.Millisecond, "For get command. Interval between sending GET messages.")
 	stat := flag.Bool("s", false, "For get command. Output performance measurements.")
 	verbose := flag.Bool("v", false, "Verbose logging. Use grep.")
@@ -47,14 +47,10 @@ func main() {
 	if *verbose {
 		lch = make(chan []byte, 100)
 		go func(lch <-chan []byte) {
-			var dlf *os.File
-			dlf = os.Stdout
-			defer dlf.Close()
-			dlw := bufio.NewWriter(dlf)
-			fl := *flush
+			dlw := bufio.NewWriter(os.Stdout)
 			for l := range lch {
-				dlw.Write(l)
-				if fl {
+				fmt.Fprint(dlw, string(l))
+				if *flush {
 					dlw.Flush()
 				}
 			}
