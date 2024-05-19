@@ -22,14 +22,14 @@ import (
 var commit string
 
 func main() {
-	laddrstr := flag.String("l", "[::]:1618", "Listen address:port")
+	laddrstr := flag.String("l", "[::]:127", "Listen address:port")
 	edge := flag.String("e", "", "Edge bootstrap address:port")
 	epoch := flag.Duration("epoch", 20*time.Microsecond, "Base cycle period. Reduce to increase bandwidth usage.")
 	dcap := flag.Uint("dcap", 100000, "Dat map capacity")
 	fcap := flag.Uint("fcap", 10000, "Cuckoo filter capacity. 10K (default) or 100K should be good ;)")
 	pull := flag.Uint64("pull", 0, "Interval between pulling a random dat from a random peer (optional anonymity)")
 	prune := flag.Uint64("prune", 50000, "Interval between refreshing dat & peer maps")
-	difficulty := flag.Int("d", 32, "For set command. Number of leading zero bits.")
+	difficulty := flag.Int("d", 16, "For set command. Number of leading zero bits.")
 	rounds := flag.Int("rounds", 9, "For set command. Number of times to repeat sending dat.")
 	npeer := flag.Int("npeer", 64, "Number of peer messages to collect before sending dat.")
 	ntest := flag.Int("ntest", 1, "For set command. Repeat work & send n times. For testing.")
