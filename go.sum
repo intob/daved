@@ -3,8 +3,8 @@ github.com/dgryski/go-metro v0.0.0-20211217172704-adc40b04c140 h1:y7y0Oa6UawqTFP
 github.com/dgryski/go-metro v0.0.0-20211217172704-adc40b04c140/go.mod h1:c9O8+fpSOX1DM8cPNSkX/qsBWdkD4yd2dpciOWQjpBw=
 github.com/google/go-cmp v0.5.9 h1:O2Tfq5qg4qc4AmwVlvv0oLiVAGB7enBSJ2x2DqQFi38=
 github.com/google/go-cmp v0.5.9/go.mod h1:17dUlkBOakJ0+DkrSSNjCkIjxS6bF9zb3elmeNGIjoY=
-github.com/intob/godave v0.0.41 h1:9pu9uq557CQMzBWuBlaZMoA3oIWpMvSZPjWXK7CEwQs=
-github.com/intob/godave v0.0.41/go.mod h1:83bESlmhtWFrIhIUK9GeAT+lmIHgcLL0s0fjimNxsVc=
+github.com/intob/godave v0.0.42 h1:QME8judh+PDJsj3mZ9qGfKeLvjyRi40c3XLJ+dZ+yJg=
+github.com/intob/godave v0.0.42/go.mod h1:83bESlmhtWFrIhIUK9GeAT+lmIHgcLL0s0fjimNxsVc=
 github.com/intob/jfmt v0.2.2 h1:+PuFEIY1wYtpIlx6sFxhsqNI6xOXJkPpuobYTWbLrqw=
 github.com/intob/jfmt v0.2.2/go.mod h1:EkQYTlUkTHI0IhTT/1W2QKRVOlt6Ej7YrgxulzAywU8=
 github.com/panmari/cuckoofilter v1.0.6 h1:WKb1aSj16h22x0CKVtTCaRkJiCnVGPLEMGbNY8xwXf8=
