@@ -27,12 +27,13 @@ func main() {
 	test := flag.Bool("t", false, "Test mode. Allows unlimited ports per IP.")
 	verbose := flag.Bool("v", false, "Verbose logging. Use grep.")
 	flush := flag.Bool("f", false, "Flush log buffer after each write.")
-	epoch := flag.Duration("epoch", 30*time.Microsecond, "Base cycle period. Reduce to increase bandwidth usage.")
+	epoch := flag.Duration("epoch", 20*time.Microsecond, "Base cycle period. Reduce to increase bandwidth usage.")
+	backup := flag.String("backup", "", "Backup file. Dats and peers will be written periodically. Set to enable.")
 	dcap := flag.Int("dcap", 100000, "Dat map capacity")
 	fcap := flag.Uint("fcap", 10000, "Cuckoo filter capacity. 10K (default) or 100K should be good ;)")
 	prune := flag.Int("prune", 50000, "Interval between refreshing dat & peer maps")
 	rounds := flag.Int("rounds", 9, "For set command. Number of times to repeat sending dat.")
-	npeer := flag.Int("npeer", 64, "Number of peer messages to collect before sending dat.")
+	npeer := flag.Int("npeer", 16, "For set command. Number of peer messages to collect before each round of sending.")
 	ntest := flag.Int("ntest", 1, "For set command. Repeat work & send n times. For testing.")
 	timeout := flag.Duration("timeout", 5*time.Second, "For get command. Timeout.")
 	retry := flag.Duration("retry", 100*time.Millisecond, "For get command. Interval between sending GET messages.")
@@ -68,14 +69,15 @@ func main() {
 	}
 	fmt.Printf("listening on %s, edges: %+v\n", laddr.String(), edges)
 	d, err := godave.NewDave(&godave.Cfg{
-		LstnAddr:  laddr,
-		Edges:     edges,
-		Epoch:     *epoch,
-		DatCap:    *dcap,
-		Prune:     *prune,
-		FilterCap: *fcap,
-		Test:      *test,
-		Log:       lch,
+		LstnAddr:    laddr,
+		Edges:       edges,
+		Epoch:       *epoch,
+		DatCap:      *dcap,
+		Prune:       *prune,
+		FilterCap:   *fcap,
+		Test:        *test,
+		Log:         lch,
+		BackupFname: *backup,
 	})
 	if err != nil {
 		exit(1, "failed to make dave: %v", err)
