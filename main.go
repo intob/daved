@@ -23,20 +23,18 @@ var commit string
 func main() {
 	laddrstr := flag.String("l", "[::]:127", "Listen address:port")
 	edge := flag.String("e", "", "Edge bootstrap address:port")
-	difficulty := flag.Int("d", 16, "For set command. Number of leading zero bits.")
+	difficulty := flag.Uint("d", 16, "For set command. Number of leading zero bits.")
 	test := flag.Bool("t", false, "Test mode. Allows unlimited ports per IP.")
 	verbose := flag.Bool("v", false, "Verbose logging. Use grep.")
 	flush := flag.Bool("f", false, "Flush log buffer after each write.")
 	epoch := flag.Duration("epoch", 10*time.Microsecond, "Base cycle period. Reduce to increase bandwidth usage.")
 	backup := flag.String("backup", "", "Backup file. Dats and peers will be written periodically. Set to enable.")
-	dcap := flag.Int("dcap", 100000, "Dat map capacity")
-	fcap := flag.Uint("fcap", 10000, "Cuckoo filter capacity. 10K (default) or 100K should be good ;)")
-	prune := flag.Int("prune", 50000, "Interval between refreshing dat & peer maps")
+	scap := flag.Int("scap", 5000, "Dat map shard capacity. Each shard corresponds to a difficulty level.")
+	fcap := flag.Uint("fcap", 1000, "Cuckoo filter capacity. 1K (default) or 10K should be good ;)")
+	prune := flag.Int("prune", 50000, "Interval in epochs between refreshing dat & peer maps")
 	rounds := flag.Int("rounds", 9, "For set command. Number of times to repeat sending dat.")
-	npeer := flag.Int("npeer", 16, "For set command. Number of peer messages to collect before each round of sending.")
 	ntest := flag.Int("ntest", 1, "For set command. Repeat work & send n times. For testing.")
 	timeout := flag.Duration("timeout", 5*time.Second, "For get command. Timeout.")
-	retry := flag.Duration("retry", 100*time.Millisecond, "For get command. Interval between sending GET messages.")
 	stat := flag.Bool("stat", false, "For get command. Output performance measurements.")
 	flag.Parse()
 	laddr, err := net.ResolveUDPAddr("udp", *laddrstr)
@@ -72,8 +70,8 @@ func main() {
 		LstnAddr:    laddr,
 		Edges:       edges,
 		Epoch:       *epoch,
-		DatCap:      *dcap,
 		Prune:       *prune,
+		ShardCap:    *scap,
 		FilterCap:   *fcap,
 		Test:        *test,
 		Log:         lch,
@@ -94,7 +92,7 @@ func main() {
 		if flag.NArg() < 2 {
 			exit(1, "missing argument: set <VAL>")
 		}
-		set(d, []byte(flag.Arg(1)), *difficulty, *rounds, *npeer, *ntest)
+		set(d, []byte(flag.Arg(1)), uint8(*difficulty), *rounds, *ntest, *epoch)
 		return
 	case "setf":
 		if flag.NArg() < 2 {
@@ -104,7 +102,7 @@ func main() {
 		if err != nil {
 			exit(2, "error reading file: %v", err)
 		}
-		set(d, data, *difficulty, *rounds, *npeer, *ntest)
+		set(d, data, uint8(*difficulty), *rounds, *ntest, *epoch)
 		return
 	case "get":
 		if flag.NArg() < 2 {
@@ -116,7 +114,7 @@ func main() {
 		}
 		tstart := time.Now()
 		var found bool
-		for dat := range d.Get(work, *timeout, *retry) {
+		for dat := range d.Get(work, *timeout) {
 			found = true
 			fmt.Println(string(dat.V))
 		}
@@ -146,7 +144,7 @@ func main() {
 	}
 }
 
-func set(d *godave.Dave, val []byte, difficulty, rounds, npeer, ntest int) {
+func set(d *godave.Dave, val []byte, difficulty uint8, rounds, ntest int, epoch time.Duration) {
 	done := make(chan struct{})
 	go func() {
 		ti := time.NewTicker(time.Second)
@@ -184,7 +182,10 @@ func set(d *godave.Dave, val []byte, difficulty, rounds, npeer, ntest int) {
 		dat.W = s.work
 		dat.S = s.salt
 		fmt.Printf("\nWork: %x\nMass: %x\n", dat.W, godave.Mass(dat.W, dat.Ti))
-		<-d.Set(*dat, rounds, npeer)
+		<-d.Set(*dat, rounds)
+		if ntest > 1 {
+			time.Sleep(epoch)
+		}
 	}
 	done <- struct{}{}
 }
