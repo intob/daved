@@ -1,29 +1,21 @@
 Daved is a command-line interface for basic interaction with a dave network. You may join any dave network by entering the ip:port with the -e :
 
-The default operating mode is running as a node, participating in network gossip. It will listen for dats, as they are gossipped randomly through the network, relaying them as in the protocol spec.
+The default operating mode is running as a node.
 
-When running multiple instances of daved on one ip-address, random ports will often cause packet filter collisions (port is hashed using a 4-bit hash). I suggest using pre-defined ports with -l in this case.
-
-Arguments, followed by default values:
+Flags:
 -l [::]:127             Listen ip address and port (listen on every interface, on port 127)
--e :2001            Bootstrap to port, local machine inferred
--e 3.7.13.31:37     Bootstrap to ip:port
--c 500000           Capacity of dat map held in memory.
--f 10000            Cuckoo filter capacity.
--v                  Verbose logging, grep by log path prefix.
--d 2                For set command. Difficulty of poof-of-work. Number of leading zero bytes in work hash.
+-e :2001                Bootstrap to port, local machine is inferred
+-e 12.34.56.78:127      Bootstrap to ip:port
+-v                      Verbose logging, grep to filter.
+-f                      Flush buffer after each log message is written to stdout.
+-t                      Test flag. Set to disable the single port per IP condition.
+-d 4                    For set command. Difficulty of poof-of-work in number of leading zero bits.
 
-Try dave on your machine by starting multiple daves! ;)
+There are more flags, but these are important. Look in the main function or use -help flag.
 
-Open 3 terminals, and run: daveda
-
-
-
-daved -v | grep /d/pr
-
-Or:
+Modes:
+daved
+daved version
 daved set hello_dave
-A hash will be returned after the work & broadcast, with default difficulty.
-
-daved get <HASH>
-
+daved setf myfile.txt
+daved get $HASH

@@ -27,7 +27,7 @@ func main() {
 	test := flag.Bool("t", false, "Test mode. Allows unlimited ports per IP.")
 	verbose := flag.Bool("v", false, "Verbose logging. Use grep.")
 	flush := flag.Bool("f", false, "Flush log buffer after each write.")
-	epoch := flag.Duration("epoch", 20*time.Microsecond, "Base cycle period. Reduce to increase bandwidth usage.")
+	epoch := flag.Duration("epoch", 10*time.Microsecond, "Base cycle period. Reduce to increase bandwidth usage.")
 	backup := flag.String("backup", "", "Backup file. Dats and peers will be written periodically. Set to enable.")
 	dcap := flag.Int("dcap", 100000, "Dat map capacity")
 	fcap := flag.Uint("fcap", 10000, "Cuckoo filter capacity. 10K (default) or 100K should be good ;)")
