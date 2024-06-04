@@ -4,6 +4,7 @@ import (
 	"bufio"
 	_ "embed"
 	"encoding/hex"
+	"errors"
 	"flag"
 	"fmt"
 	"net"
@@ -143,6 +144,9 @@ func main() {
 func parseAddrPortMaybeHostname(edge string) ([]netip.AddrPort, error) {
 	addrs := make([]netip.AddrPort, 0)
 	portStart := strings.LastIndex(edge, ":")
+	if portStart < 0 || portStart >= len(edge) {
+		return nil, errors.New("missing port")
+	}
 	port := edge[portStart+1:]
 	host := edge[:portStart]
 
