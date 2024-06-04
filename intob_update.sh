@@ -1,7 +1,10 @@
 #!/bin/bash
 export HOST=$1
-echo "UPDATING HOST $HOST"
-ssh -i ~/.ssh/awsintob.pem -n -o StrictHostKeyChecking=no admin@$HOST "sudo rm daved daved_edge.service.conf"
-scp -i ~/.ssh/awsintob.pem -o StrictHostKeyChecking=no daved intob_daved_edge.service.conf admin@$HOST:~
-ssh -i ~/.ssh/awsintob.pem -n -o StrictHostKeyChecking=no admin@$HOST "sudo cp -f intob_daved_edge.service.conf /etc/systemd/system/daved.service && sudo systemctl daemon-reload && sudo systemctl enable daved && sudo systemctl restart daved && sudo systemctl status daved"
+export SSHUSER=$2
+export CONF=$3
+export OPT="StrictHostKeyChecking=no"
+echo "UPDATING HOST $HOST WITH SSHUSER:$SSHUSER CONF:$CONF"
+#ssh -o $OPT -n $SSHUSER@$HOST "sudo rm daved $CONF" # scp overwrites by default
+scp -o $OPT daved $CONF $SSHUSER@$HOST:~
+ssh -o $OPT -n $SSHUSER@$HOST "sudo cp -f $CONF /etc/systemd/system/daved.service && sudo cp -f daved /root/daved && sudo systemctl daemon-reload && sudo systemctl enable daved && sudo systemctl restart daved && sudo systemctl status daved"
 
