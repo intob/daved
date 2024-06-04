@@ -56,14 +56,10 @@ func main() {
 	}
 	edges := []netip.AddrPort{}
 	if *edge != "" {
-		if strings.HasPrefix(*edge, ":") {
-			*edge = "[::1]" + *edge
-		}
-		addr, err := netip.ParseAddrPort(*edge)
+		edges, err = parseAddrPortMaybeHostname(*edge)
 		if err != nil {
-			exit(1, "failed to parse edge bootstrap addr -e=%q: %v", edge, err)
+			exit(1, fmt.Sprintf("failed to parse addr: %s", err))
 		}
-		edges = append(edges, addr)
 	}
 	fmt.Printf("listening on %s, edges: %+v\n", laddr.String(), edges)
 	d, err := godave.NewDave(&godave.Cfg{
@@ -142,6 +138,49 @@ func main() {
 			}
 		}
 	}
+}
+
+func parseAddrPortMaybeHostname(edge string) ([]netip.AddrPort, error) {
+	addrs := make([]netip.AddrPort, 0)
+	portStart := strings.LastIndex(edge, ":")
+	port := edge[portStart+1:]
+	host := edge[:portStart]
+
+	ip := net.ParseIP(host)
+	if ip != nil {
+		// host is an IP address
+		addrPort, err := parseAddrPort(net.JoinHostPort(ip.String(), port))
+		if err != nil {
+			return nil, err
+		}
+		addrs = append(addrs, addrPort)
+	} else {
+		// host is a hostname, lookup IP addresses
+		hostAddrs, err := net.LookupHost(host)
+		if err != nil {
+			return nil, err
+		}
+		for _, addr := range hostAddrs {
+			addrPort, err := parseAddrPort(net.JoinHostPort(addr, port))
+			if err != nil {
+				return nil, err
+			}
+			addrs = append(addrs, addrPort)
+		}
+	}
+
+	return addrs, nil
+}
+
+func parseAddrPort(addrport string) (netip.AddrPort, error) {
+	if strings.HasPrefix(addrport, ":") { // infer local machine if no IP
+		addrport = "[::1]" + addrport
+	}
+	parsed, err := netip.ParseAddrPort(addrport)
+	if err != nil {
+		return parsed, fmt.Errorf("failed to parse addr %q: %w", addrport, err)
+	}
+	return parsed, nil
 }
 
 func set(d *godave.Dave, val []byte, difficulty uint8, rounds, ntest int, epoch time.Duration) {
