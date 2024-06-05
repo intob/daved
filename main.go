@@ -24,7 +24,7 @@ var commit string
 func main() {
 	laddrstr := flag.String("l", "[::]:127", "Listen address:port")
 	edge := flag.String("e", "", "Edge bootstrap address:port")
-	difficulty := flag.Uint("d", 16, "For set command. Number of leading zero bits.")
+	difficulty := flag.Uint("d", godave.MINWORK, "For set command. Number of leading zero bits.")
 	test := flag.Bool("t", false, "Test mode. Allows unlimited ports per IP.")
 	verbose := flag.Bool("v", false, "Verbose logging. Use grep.")
 	flush := flag.Bool("f", false, "Flush log buffer after each write.")
@@ -33,7 +33,7 @@ func main() {
 	scap := flag.Int("scap", 10000, "Dat map shard capacity. Each shard corresponds to a difficulty level.")
 	fcap := flag.Uint("fcap", 1000, "Cuckoo filter capacity. 1K (default) or 10K should be good ;)")
 	prune := flag.Int("prune", 50000, "Interval in epochs between refreshing dat & peer maps & writing backup.")
-	rounds := flag.Int("rounds", 9, "For set command. Number of times to repeat sending dat.")
+	rounds := flag.Int("rounds", 3, "For set command. Number of times to repeat sending dat.")
 	ntest := flag.Int("ntest", 1, "For set command. Repeat work & send n times. For testing.")
 	timeout := flag.Duration("timeout", 5*time.Second, "For get command. Timeout.")
 	stat := flag.Bool("stat", false, "For get command. Output performance measurements.")
