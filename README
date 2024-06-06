@@ -7,6 +7,7 @@ Flags:
 -e :2001                Bootstrap to port, local machine is inferred
 -e 12.34.56.78:127      Bootstrap to ip:port
 -e edge:127             Bootstrap to hostname:port
+-b backup.dave          Set backup file to enable writing to disk.
 -f                      Flush buffer after each log message is written to stdout.
 -t                      Test flag. Set to disable the single port per IP condition.
 -d 4                    For set command. Difficulty of poof-of-work in number of leading zero bits.
