@@ -3,8 +3,8 @@ github.com/dgryski/go-metro v0.0.0-20211217172704-adc40b04c140 h1:y7y0Oa6UawqTFP
 github.com/dgryski/go-metro v0.0.0-20211217172704-adc40b04c140/go.mod h1:c9O8+fpSOX1DM8cPNSkX/qsBWdkD4yd2dpciOWQjpBw=
 github.com/google/go-cmp v0.5.9 h1:O2Tfq5qg4qc4AmwVlvv0oLiVAGB7enBSJ2x2DqQFi38=
 github.com/google/go-cmp v0.5.9/go.mod h1:17dUlkBOakJ0+DkrSSNjCkIjxS6bF9zb3elmeNGIjoY=
-github.com/intob/godave v0.0.47 h1:ZxicR67YuDkkZU0f06Na1xeyndHzY9MXDhhShHB1yRI=
-github.com/intob/godave v0.0.47/go.mod h1:ifw16s/BFv3OPBCoEVHEoPOvG1Kae+drylV0fGFdew4=
+github.com/intob/godave v0.0.48 h1:lae0ml7a6GrECJHmv3/35DE7hrijlNUuqEoVKJpJbTE=
+github.com/intob/godave v0.0.48/go.mod h1:ifw16s/BFv3OPBCoEVHEoPOvG1Kae+drylV0fGFdew4=
 github.com/intob/jfmt v0.2.2 h1:+PuFEIY1wYtpIlx6sFxhsqNI6xOXJkPpuobYTWbLrqw=
 github.com/intob/jfmt v0.2.2/go.mod h1:EkQYTlUkTHI0IhTT/1W2QKRVOlt6Ej7YrgxulzAywU8=
 github.com/klauspost/cpuid/v2 v2.0.9 h1:lgaqFMSdTdQYdZ04uHyN2d/eKdOMyi2YLSvlQIBFYa4=

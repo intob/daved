@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"context"
 	_ "embed"
 	"encoding/hex"
 	"errors"
@@ -10,8 +11,10 @@ import (
 	"net"
 	"net/netip"
 	"os"
+	"os/signal"
 	"runtime"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/intob/godave"
@@ -26,7 +29,6 @@ func main() {
 	edge := flag.String("e", "", "Edge bootstrap address:port")
 	difficulty := flag.Uint("d", godave.MINWORK, "For set command. Number of leading zero bits.")
 	test := flag.Bool("t", false, "Test mode. Permits full use of port space per IP.")
-	verbose := flag.Bool("v", false, "Verbose logging. Use grep.")
 	flush := flag.Bool("f", false, "Flush log buffer after each write.")
 	epoch := flag.Duration("epoch", 20*time.Microsecond, "Base cycle period. Reduce to increase bandwidth usage.")
 	backup := flag.String("backup", "", "Backup file. Dats and peers will be written periodically. Set to enable.")
@@ -42,19 +44,16 @@ func main() {
 	if err != nil {
 		exit(1, "failed to resolve UDP listen address: %v", err)
 	}
-	var lch chan []byte
-	if *verbose {
-		lch = make(chan []byte, 100)
-		go func(lch <-chan []byte) {
-			dlw := bufio.NewWriter(os.Stdout)
-			for l := range lch {
-				fmt.Fprint(dlw, string(l))
-				if *flush {
-					dlw.Flush()
-				}
+	lch := make(chan []byte, 100)
+	go func(lch <-chan []byte) {
+		dlw := bufio.NewWriter(os.Stdout)
+		for l := range lch {
+			fmt.Fprint(dlw, string(l))
+			if *flush {
+				dlw.Flush()
 			}
-		}(lch)
-	}
+		}
+	}(lch)
 	edges := []netip.AddrPort{}
 	if *edge != "" {
 		edges, err = parseAddrPortMaybeHostname(*edge)
@@ -77,67 +76,50 @@ func main() {
 	if err != nil {
 		exit(1, "failed to make dave: %v", err)
 	}
-	var action string
-	if flag.NArg() > 0 {
-		action = flag.Arg(0)
-	}
-	switch action {
-	case "version":
-		fmt.Printf("commit %s\n", commit)
-		return
-	case "set":
-		if flag.NArg() < 2 {
-			exit(1, "missing argument: set <VAL>")
-		}
-		set(d, []byte(flag.Arg(1)), uint8(*difficulty), *rounds, *ntest, *epoch)
-		return
-	case "setf":
-		if flag.NArg() < 2 {
-			exit(1, "missing argument: setf <FILENAME>")
-		}
-		data, err := os.ReadFile(flag.Arg(1))
-		if err != nil {
-			exit(2, "error reading file: %v", err)
-		}
-		set(d, data, uint8(*difficulty), *rounds, *ntest, *epoch)
-		return
-	case "get":
-		if flag.NArg() < 2 {
-			exit(1, "correct usage is get <WORK>")
-		}
-		work, err := hex.DecodeString(flag.Arg(1))
-		if err != nil {
-			exit(1, "invalid input <WORK>: %v", err)
-		}
-		tstart := time.Now()
-		var found bool
-		for dat := range d.Get(work, *timeout) {
-			found = true
-			fmt.Println(string(dat.V))
-		}
-		if !found {
-			exit(1, "dat not found")
-		}
-		if *stat {
-			fmt.Printf("t: %s\n", time.Since(tstart))
-		}
-		return
-	}
-	if *verbose {
-		<-make(chan struct{})
-	} else {
-		fmt.Printf("commit %s\n", commit)
-		var i uint64
-		ts := time.Now()
-		tick := time.NewTicker(time.Second)
-		for {
-			select {
-			case <-d.Recv:
-				i++
-			case <-tick.C:
-				fmt.Printf("\rhandled %s dats in %s\033[0K", jfmt.FmtCount64(i), jfmt.FmtDuration(time.Since(ts)))
+	if flag.NArg() > 0 { // COMMAND MODE
+		switch flag.Arg(0) {
+		case "version":
+			fmt.Printf("commit %s\n", commit)
+		case "set":
+			if flag.NArg() < 2 {
+				exit(1, "missing argument: set <VAL>")
+			}
+			set(d, []byte(flag.Arg(1)), uint8(*difficulty), *rounds, *ntest, *epoch)
+			return
+		case "setf":
+			if flag.NArg() < 2 {
+				exit(1, "missing argument: setf <FILENAME>")
+			}
+			data, err := os.ReadFile(flag.Arg(1))
+			if err != nil {
+				exit(2, "error reading file: %v", err)
+			}
+			set(d, data, uint8(*difficulty), *rounds, *ntest, *epoch)
+		case "get":
+			if flag.NArg() < 2 {
+				exit(1, "correct usage is get <WORK>")
+			}
+			work, err := hex.DecodeString(flag.Arg(1))
+			if err != nil {
+				exit(1, "invalid input <WORK>: %v", err)
+			}
+			tstart := time.Now()
+			var found bool
+			for dat := range d.Get(work, *timeout) {
+				found = true
+				fmt.Println(string(dat.V))
+			}
+			if !found {
+				exit(1, "dat not found")
+			}
+			if *stat {
+				fmt.Printf("t: %s\n", time.Since(tstart))
 			}
 		}
+	} else { // NODE MODE
+		<-getCtx().Done()
+		<-d.Kill()
+		fmt.Println("shutdown beautifully")
 	}
 }
 
@@ -149,17 +131,14 @@ func parseAddrPortMaybeHostname(edge string) ([]netip.AddrPort, error) {
 	}
 	port := edge[portStart+1:]
 	host := edge[:portStart]
-
 	ip := net.ParseIP(host)
-	if ip != nil {
-		// host is an IP address
+	if ip != nil { // host is an IP address
 		addrPort, err := parseAddrPort(net.JoinHostPort(ip.String(), port))
 		if err != nil {
 			return nil, err
 		}
 		addrs = append(addrs, addrPort)
-	} else {
-		// host is a hostname, lookup IP addresses
+	} else { // host is a hostname, lookup IP addresses
 		hostAddrs, err := net.LookupHost(host)
 		if err != nil {
 			return nil, err
@@ -172,7 +151,6 @@ func parseAddrPortMaybeHostname(edge string) ([]netip.AddrPort, error) {
 			addrs = append(addrs, addrPort)
 		}
 	}
-
 	return addrs, nil
 }
 
@@ -236,4 +214,22 @@ func set(d *godave.Dave, val []byte, difficulty uint8, rounds, ntest int, epoch 
 func exit(code int, msg string, args ...any) {
 	fmt.Printf(msg+"\n", args...)
 	os.Exit(code)
+}
+
+func cancelOnKillSig(sigs chan os.Signal, cancel context.CancelFunc) {
+	switch <-sigs {
+	case syscall.SIGINT:
+		fmt.Println("\nreceived SIGINT")
+	case syscall.SIGTERM:
+		fmt.Println("\nreceived SIGTERM")
+	}
+	cancel()
+}
+
+func getCtx() context.Context {
+	sigs := make(chan os.Signal, 1)
+	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
+	ctx, cancel := context.WithCancel(context.Background())
+	go cancelOnKillSig(sigs, cancel)
+	return ctx
 }
