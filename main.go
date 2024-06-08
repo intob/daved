@@ -29,12 +29,10 @@ func main() {
 	edge := flag.String("e", "", "Edge bootstrap address:port")
 	backup := flag.String("b", "", "Backup file, set to enable.")
 	difficulty := flag.Uint("d", godave.MINWORK, "For set command. Number of leading zero bits.")
-	test := flag.Bool("t", false, "Test mode. Permits full use of port space per IP.")
 	flush := flag.Bool("f", false, "Flush log buffer after each write.")
-	epoch := flag.Duration("epoch", 20*time.Microsecond, "Base cycle period. Reduce to increase bandwidth usage.")
-	scap := flag.Int("scap", 10000, "Dat shard capacity. Each shard corresponds to a difficulty level.")
-	fcap := flag.Uint("fcap", 1000, "Cuckoo filter capacity.)")
-	prune := flag.Int("prune", 20000, "Interval in epochs between refreshing dat & peer maps & writing backup.")
+	epoch := flag.Duration("epoch", 50*time.Microsecond, "Base cycle period. Reduce to increase bandwidth usage.")
+	shardcap := flag.Uint("shardcap", 10000, "Shard capacity. Each shard corresponds to a difficulty level. There are 256 possible shards, but there will probably be 100 at most.")
+	seedfcap := flag.Uint("seedfcap", 100000, "Seed filter capacity.")
 	rounds := flag.Int("rounds", 3, "For set command. Number of times to repeat sending dat.")
 	ntest := flag.Int("ntest", 1, "For set command. Repeat work & send n times. For testing.")
 	timeout := flag.Duration("timeout", 5*time.Second, "For get command. Timeout.")
@@ -44,16 +42,22 @@ func main() {
 	if err != nil {
 		exit(1, "failed to resolve UDP listen address: %v", err)
 	}
-	lch := make(chan []byte, 100)
-	go func(lch <-chan []byte) {
-		dlw := bufio.NewWriter(os.Stdout)
-		for l := range lch {
-			fmt.Fprint(dlw, string(l))
+	var lch chan []byte
+	if flag.NArg() == 0 { // NODE MODE
+		lch = make(chan []byte, 1)
+		go func(lch <-chan []byte) {
 			if *flush {
-				dlw.Flush()
+				for l := range lch {
+					fmt.Print(string(l))
+				}
+			} else {
+				dlw := bufio.NewWriter(os.Stdout)
+				for l := range lch {
+					fmt.Fprint(dlw, string(l))
+				}
 			}
-		}
-	}(lch)
+		}(lch)
+	}
 	edges := []netip.AddrPort{}
 	if *edge != "" {
 		edges, err = parseAddrPortMaybeHostname(*edge)
@@ -61,17 +65,14 @@ func main() {
 			exit(1, fmt.Sprintf("failed to parse addr: %s", err))
 		}
 	}
-	fmt.Printf("listening on %s, edges: %+v\n", laddr.String(), edges)
 	d, err := godave.NewDave(&godave.Cfg{
-		LstnAddr:    laddr,
-		Edges:       edges,
-		Epoch:       *epoch,
-		Prune:       *prune,
-		ShardCap:    *scap,
-		FilterCap:   *fcap,
-		Test:        *test,
-		Log:         lch,
-		BackupFname: *backup,
+		LstnAddr:      laddr,
+		Edges:         edges,
+		Epoch:         *epoch,
+		ShardCap:      *shardcap,
+		SeedFilterCap: *seedfcap,
+		Log:           lch,
+		BackupFname:   *backup,
 	})
 	if err != nil {
 		exit(1, "failed to make dave: %v", err)
@@ -126,11 +127,14 @@ func main() {
 func parseAddrPortMaybeHostname(edge string) ([]netip.AddrPort, error) {
 	addrs := make([]netip.AddrPort, 0)
 	portStart := strings.LastIndex(edge, ":")
-	if portStart < 0 || portStart >= len(edge) {
+	if portStart < 0 || portStart == len(edge) {
 		return nil, errors.New("missing port")
 	}
 	port := edge[portStart+1:]
 	host := edge[:portStart]
+	if host == "" { // default to local machine
+		host = "127.0.0.1"
+	}
 	ip := net.ParseIP(host)
 	if ip != nil { // host is an IP address
 		addrPort, err := parseAddrPort(net.JoinHostPort(ip.String(), port))
@@ -187,7 +191,6 @@ func set(d *godave.Dave, val []byte, difficulty uint8, rounds, ntest int, epoch 
 	chalch := make(chan chal, 1)
 	solch := make(chan sol, 1)
 	ncpu := max(runtime.NumCPU()-1, 1)
-	fmt.Printf("hashing with %d cores", ncpu)
 	for nroutine := 0; nroutine < ncpu; nroutine++ {
 		go func(chalch <-chan chal) {
 			for c := range chalch {
@@ -202,7 +205,7 @@ func set(d *godave.Dave, val []byte, difficulty uint8, rounds, ntest int, epoch 
 		s := <-solch
 		dat.W = s.work
 		dat.S = s.salt
-		fmt.Printf("\nWork: %x\nMass: %x\n", dat.W, godave.Mass(dat.W, dat.Ti))
+		fmt.Printf("\r%x\n", dat.W)
 		<-d.Set(*dat, rounds)
 		if ntest > 1 {
 			time.Sleep(epoch)

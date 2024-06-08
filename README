@@ -1,6 +1,5 @@
-Daved is a command-line interface for basic interaction with a dave network. You may join any dave network by entering the ip:port with the -e :
+Daved is a command-line interface for basic interaction with a dave network.
 
-The default operating mode is running as a node.
 
 Flags:
 -l [::]:127             Listen ip address and port (listen on every interface, on port 127)
@@ -9,10 +8,11 @@ Flags:
 -e edge:127             Bootstrap to hostname:port
 -b backup.dave          Set backup file to enable writing to disk.
 -f                      Flush buffer after each log message is written to stdout.
--t                      Test flag. Set to disable the single port per IP condition.
--d 4                    For set command. Difficulty of poof-of-work in number of leading zero bits.
+-d 16                   For set command. Difficulty of poof-of-work in number of leading zero bits.
 
 There are more flags, but these are important. Look in the main function or use -help flag.
+
+The default operating mode is running as a node.
 
 Modes:
 daved
