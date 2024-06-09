@@ -30,13 +30,14 @@ func main() {
 	backup := flag.String("b", "", "Backup file, set to enable.")
 	difficulty := flag.Uint("d", godave.MINWORK, "For set command. Number of leading zero bits.")
 	flush := flag.Bool("f", false, "Flush log buffer after each write.")
-	epoch := flag.Duration("epoch", 50*time.Microsecond, "Base cycle period. Reduce to increase bandwidth usage.")
-	shardcap := flag.Uint("shardcap", 10000, "Shard capacity. Each shard corresponds to a difficulty level. There are 256 possible shards, but there will probably be 100 at most.")
-	seedfcap := flag.Uint("seedfcap", 100000, "Seed filter capacity.")
+	epoch := flag.Duration("epoch", 20*time.Microsecond, "Base cycle period. Reduce to increase bandwidth usage.")
+	shardcap := flag.Uint("shardcap", 100000, "Shard capacity. Each shard corresponds to a difficulty level. There are 256 possible shards, but there will probably be 100 at most.")
+	seedfcap := flag.Uint("seedfcap", 1000000, "Seed filter capacity.")
 	rounds := flag.Int("rounds", 3, "For set command. Number of times to repeat sending dat.")
 	ntest := flag.Int("ntest", 1, "For set command. Repeat work & send n times. For testing.")
 	timeout := flag.Duration("timeout", 5*time.Second, "For get command. Timeout.")
 	stat := flag.Bool("stat", false, "For get command. Output performance measurements.")
+	test := flag.Bool("t", false, "Test mode. Allow multiple ports per IP.")
 	flag.Parse()
 	laddr, err := net.ResolveUDPAddr("udp", *laddrstr)
 	if err != nil {
@@ -62,7 +63,7 @@ func main() {
 	if *edge != "" {
 		edges, err = parseAddrPortMaybeHostname(*edge)
 		if err != nil {
-			exit(1, fmt.Sprintf("failed to parse addr: %s", err))
+			exit(1, "failed to parse addr: %s", err)
 		}
 	}
 	d, err := godave.NewDave(&godave.Cfg{
@@ -73,6 +74,7 @@ func main() {
 		SeedFilterCap: *seedfcap,
 		Log:           lch,
 		BackupFname:   *backup,
+		Test:          *test,
 	})
 	if err != nil {
 		exit(1, "failed to make dave: %v", err)
