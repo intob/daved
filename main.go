@@ -30,9 +30,9 @@ func main() {
 	backup := flag.String("b", "", "Backup file, set to enable.")
 	difficulty := flag.Uint("d", godave.MINWORK, "For set command. Number of leading zero bits.")
 	flush := flag.Bool("f", false, "Flush log buffer after each write.")
-	epoch := flag.Duration("epoch", 20*time.Microsecond, "Base cycle period. Reduce to increase bandwidth usage.")
+	epoch := flag.Duration("epoch", 10*time.Microsecond, "Base cycle period. Reduce to increase bandwidth usage.")
 	shardcap := flag.Uint("shardcap", 100000, "Shard capacity. Each shard corresponds to a difficulty level. There are 256 possible shards, but there will probably be 100 at most.")
-	seedfcap := flag.Uint("seedfcap", 1000000, "Seed filter capacity.")
+	filtercap := flag.Uint("filtercap", 100000, "Cuckoo filter capacity.")
 	rounds := flag.Int("rounds", 3, "For set command. Number of times to repeat sending dat.")
 	ntest := flag.Int("ntest", 1, "For set command. Repeat work & send n times. For testing.")
 	timeout := flag.Duration("timeout", 5*time.Second, "For get command. Timeout.")
@@ -43,38 +43,38 @@ func main() {
 	if err != nil {
 		exit(1, "failed to resolve UDP listen address: %v", err)
 	}
-	var lch chan []byte
+	var lch chan string
 	if flag.NArg() == 0 { // NODE MODE
-		lch = make(chan []byte, 1)
-		go func(lch <-chan []byte) {
+		lch = make(chan string, 1)
+		go func(lch <-chan string) {
 			if *flush {
 				for l := range lch {
-					fmt.Print(string(l))
+					fmt.Println(l)
 				}
 			} else {
 				dlw := bufio.NewWriter(os.Stdout)
 				for l := range lch {
-					fmt.Fprint(dlw, string(l))
+					fmt.Fprintln(dlw, l)
 				}
 			}
 		}(lch)
 	}
-	edges := []netip.AddrPort{}
+	addrs := []netip.AddrPort{}
 	if *edge != "" {
-		edges, err = parseAddrPortMaybeHostname(*edge)
+		addrs, err = parseAddrPortMaybeHostname(*edge)
 		if err != nil {
 			exit(1, "failed to parse addr: %s", err)
 		}
 	}
 	d, err := godave.NewDave(&godave.Cfg{
-		LstnAddr:      laddr,
-		Edges:         edges,
-		Epoch:         *epoch,
-		ShardCap:      *shardcap,
-		SeedFilterCap: *seedfcap,
-		Log:           lch,
-		BackupFname:   *backup,
-		Test:          *test,
+		ListenAddr:  laddr,
+		Edges:       addrs,
+		Epoch:       *epoch,
+		ShardCap:    uint32(*shardcap),
+		FilterCap:   uint32(*filtercap),
+		Log:         lch,
+		BackupFname: *backup,
+		Test:        *test,
 	})
 	if err != nil {
 		exit(1, "failed to make dave: %v", err)
@@ -121,7 +121,7 @@ func main() {
 		}
 	} else { // NODE MODE
 		<-getCtx().Done()
-		<-d.Kill()
+		//<-d.Kill()
 		fmt.Println("shutdown beautifully")
 	}
 }
@@ -208,7 +208,7 @@ func set(d *godave.Dave, val []byte, difficulty uint8, rounds, ntest int, epoch 
 		dat.W = s.work
 		dat.S = s.salt
 		fmt.Printf("\r%x\n", dat.W)
-		<-d.Set(*dat, rounds)
+		<-d.Set(dat, rounds)
 		if ntest > 1 {
 			time.Sleep(epoch)
 		}
