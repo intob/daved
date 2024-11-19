@@ -30,25 +30,21 @@ func main() {
 	backup := flag.String("b", "", "Backup file, set to enable.")
 	difficulty := flag.Uint("d", godave.MINWORK, "For set command. Number of leading zero bits.")
 	flush := flag.Bool("f", false, "Flush log buffer after each write.")
-	epoch := flag.Duration("epoch", 50*time.Microsecond, "Base cycle period. Reduce to increase bandwidth usage.")
-	shardCap := flag.Uint("shardcap", 100000, "Shard capacity. Each shard corresponds to a difficulty level.")
-	//filterCap := flag.Uint("filtercap", 10000, "Cuckoo filter capacity.")
-	seedTries := flag.Uint("seedtries", 1000, "Max number of attempts to select a dat not in the filter.")
+	shardCap := flag.Int("shardcap", 100000, "Shard capacity. Each shard corresponds to a difficulty level.")
 	rounds := flag.Int("rounds", 3, "For set command. Number of times to repeat sending dat.")
-	npeer := flag.Int("npeer", 1, "For set & get commands. Number of peers to wait for before sending messages.")
+	npeer := flag.Int("npeer", 3, "For set & get commands. Number of peers to wait for before sending messages.")
 	ntest := flag.Int("ntest", 1, "For set command. Repeat work & send n times. For testing.")
-	timeout := flag.Duration("timeout", 5*time.Second, "For get command. Timeout.")
+	timeout := flag.Duration("timeout", 10*time.Second, "Timeout for get command.")
 	stat := flag.Bool("stat", false, "For get command. Output performance measurements.")
-	test := flag.Bool("t", false, "Test mode. Allow multiple ports per IP.")
+	logLvl := flag.Int("loglvl", int(godave.LOGLVL_ERROR), "Log level: 0=ERROR,1=DEBUG")
 	flag.Parse()
 	laddr, err := net.ResolveUDPAddr("udp", *laddrStr)
 	if err != nil {
 		exit(1, "failed to resolve UDP listen address: %v", err)
 	}
-	var lch chan string
-	if flag.NArg() == 0 { // NODE MODE
-		lch = make(chan string, 1)
-		go func(lch <-chan string) {
+	lch := make(chan string, 1)
+	if flag.NArg() == 0 || *logLvl == int(godave.LOGLVL_DEBUG) { // NODE MODE OR DEBUG
+		go func() {
 			if *flush {
 				for l := range lch {
 					fmt.Println(l)
@@ -59,7 +55,7 @@ func main() {
 					fmt.Fprintln(dlw, l)
 				}
 			}
-		}(lch)
+		}()
 	}
 	addrs := []netip.AddrPort{}
 	if *edge != "" {
@@ -69,14 +65,12 @@ func main() {
 		}
 	}
 	d, err := godave.NewDave(&godave.Cfg{
-		ListenAddr:   laddr,
-		Edges:        addrs,
-		Epoch:        *epoch,
-		ShardCap:     uint32(*shardCap),
-		MaxSeedTries: uint32(*seedTries),
-		Log:          lch,
-		BackupFname:  *backup,
-		Test:         *test,
+		UdpListenAddr: laddr,
+		Edges:         addrs,
+		ShardCap:      *shardCap,
+		Log:           lch,
+		BackupFname:   *backup,
+		LogLvl:        godave.LogLvl(*logLvl),
 	})
 	if err != nil {
 		exit(1, "failed to make dave: %v", err)
@@ -89,7 +83,7 @@ func main() {
 			if flag.NArg() < 2 {
 				exit(1, "missing argument: set <VAL>")
 			}
-			set(d, []byte(flag.Arg(1)), uint8(*difficulty), *rounds, *npeer, *ntest, *epoch)
+			set(d, []byte(flag.Arg(1)), uint8(*difficulty), *rounds, *npeer, *ntest)
 			return
 		case "setf":
 			if flag.NArg() < 2 {
@@ -99,7 +93,7 @@ func main() {
 			if err != nil {
 				exit(2, "error reading file: %v", err)
 			}
-			set(d, data, uint8(*difficulty), *rounds, *npeer, *ntest, *epoch)
+			set(d, data, uint8(*difficulty), *rounds, *npeer, *ntest)
 		case "get":
 			if flag.NArg() < 2 {
 				exit(1, "correct usage is get <WORK>")
@@ -124,7 +118,7 @@ func main() {
 	} else { // NODE MODE
 		<-getCtx().Done()
 		<-d.Kill()
-		fmt.Println("shutdown beautifully")
+		fmt.Println("shutdown gracefully")
 	}
 }
 
@@ -180,17 +174,17 @@ func parseAddrPort(addrport string) (netip.AddrPort, error) {
 	return parsed, nil
 }
 
-func set(d *godave.Dave, val []byte, difficulty uint8, rounds, npeer, ntest int, epoch time.Duration) {
+func set(d *godave.Dave, val []byte, difficulty uint8, rounds, npeer, ntest int) {
 	done := make(chan struct{})
+	start := time.Now()
 	go func() {
-		ti := time.NewTicker(time.Second)
-		t := time.Now()
+		tick := time.NewTicker(time.Second)
 		for {
 			select {
 			case <-done:
 				return
-			case <-ti.C:
-				fmt.Printf("\rworking for %s\033[0K", jfmt.FmtDuration(time.Since(t)))
+			case <-tick.C:
+				fmt.Printf("\rworking for %s\033[0K", jfmt.FmtDuration(time.Since(start)))
 			}
 		}
 	}()
@@ -201,8 +195,7 @@ func set(d *godave.Dave, val []byte, difficulty uint8, rounds, npeer, ntest int,
 	type sol struct{ work, salt []byte }
 	chalch := make(chan chal, 1)
 	solch := make(chan sol, 1)
-	ncpu := max(runtime.NumCPU()-1, 1)
-	for nroutine := 0; nroutine < ncpu; nroutine++ {
+	for nroutine := 0; nroutine < runtime.NumCPU(); nroutine++ {
 		go func(chalch <-chan chal) {
 			for c := range chalch {
 				work, salt := godave.Work(c.v, godave.Ttb(c.ti), difficulty)
@@ -216,12 +209,10 @@ func set(d *godave.Dave, val []byte, difficulty uint8, rounds, npeer, ntest int,
 		s := <-solch
 		dat.W = s.work
 		dat.S = s.salt
-		fmt.Printf("\r%x\n", dat.W)
 		<-d.Set(dat, int32(rounds), int32(npeer))
-		if ntest > 1 {
-			time.Sleep(epoch)
-		}
+		fmt.Printf("\r%x\n", dat.W)
 	}
+	time.Sleep(time.Second) // wait for send to finish
 	done <- struct{}{}
 }
 
