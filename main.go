@@ -13,7 +13,6 @@ import (
 	"net/netip"
 	"os"
 	"os/signal"
-	"runtime"
 	"strings"
 	"syscall"
 	"time"
@@ -189,33 +188,21 @@ func parseAddrPort(addrport string) (netip.AddrPort, error) {
 }
 
 func set(d *godave.Dave, key, val []byte, privKey ed25519.PrivateKey, difficulty uint8, npeer, ntest int) {
-	done := make(chan struct{})
-	start := time.Now()
-	go func() {
-		tick := time.NewTicker(time.Second)
-		for {
-			select {
-			case <-done:
-				return
-			case <-tick.C:
-				fmt.Printf("\rworking for %s\033[0K", jfmt.FmtDuration(time.Since(start)))
+	done := make(chan struct{}, 1)
+	if ntest == 1 { // don't log time if we're sending loads to test
+		start := time.Now()
+		go func() {
+			tick := time.NewTicker(time.Second)
+			for {
+				select {
+				case <-done:
+					fmt.Printf("\rdone\033[0K")
+					return
+				case <-tick.C:
+					fmt.Printf("\rworking for %s\033[0K", jfmt.FmtDuration(time.Since(start)))
+				}
 			}
-		}
-	}()
-	type chal struct {
-		k, v []byte
-		ti   time.Time
-	}
-	type sol struct{ work, salt []byte }
-	chalch := make(chan chal, 1)
-	solch := make(chan sol, 1)
-	for nroutine := 0; nroutine < runtime.NumCPU(); nroutine++ {
-		go func(chalch <-chan chal) {
-			for c := range chalch {
-				work, salt := godave.Work(c.k, c.v, godave.Ttb(c.ti), difficulty)
-				solch <- sol{work, salt}
-			}
-		}(chalch)
+		}()
 	}
 	keyInc := key
 	for i := 0; i < ntest; i++ {
@@ -224,16 +211,14 @@ func set(d *godave.Dave, key, val []byte, privKey ed25519.PrivateKey, difficulty
 		}
 		// 100ms margin, incase clocks are not well synchronised
 		dat := &godave.Dat{Key: keyInc, Val: val, Time: time.Now().Add(-100 * time.Millisecond)}
-		chalch <- chal{dat.Key, dat.Val, dat.Time}
-		s := <-solch
-		dat.Work = s.work
-		dat.Salt = s.salt
+		dat.Work, dat.Salt = godave.Work(dat.Key, dat.Val, godave.Ttb(dat.Time), difficulty)
 		dat.Sig = ed25519.Sign(privKey, dat.Work)
 		dat.PubKey = privKey.Public().(ed25519.PublicKey)
 		<-d.Set(dat, int32(npeer))
-		fmt.Printf("\r\nput %s", dat.Key)
+		if ntest > 1 {
+			fmt.Printf("\r\nput %s\n", dat.Key)
+		}
 	}
-	time.Sleep(time.Second) // wait for send to finish
 	done <- struct{}{}
 }
 
