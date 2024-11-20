@@ -3,8 +3,9 @@ package main
 import (
 	"bufio"
 	"context"
+	"crypto/ed25519"
+	"crypto/rand"
 	_ "embed"
-	"encoding/hex"
 	"errors"
 	"flag"
 	"fmt"
@@ -28,6 +29,7 @@ func main() {
 	laddrStr := flag.String("l", "[::]:127", "Listen address:port")
 	edge := flag.String("e", "", "Edge bootstrap address:port")
 	backup := flag.String("b", "", "Backup file, set to enable.")
+	keyFname := flag.String("key", "key.dave", "Private key filename")
 	difficulty := flag.Uint("d", godave.MINWORK, "For set command. Number of leading zero bits.")
 	flush := flag.Bool("f", false, "Flush log buffer after each write.")
 	shardCap := flag.Int("shardcap", 100000, "Shard capacity. Each shard corresponds to a difficulty level.")
@@ -64,6 +66,13 @@ func main() {
 			exit(1, "failed to parse addr: %s", err)
 		}
 	}
+	var privKey ed25519.PrivateKey
+	privKeyRaw, err := os.ReadFile(*keyFname)
+	if err != nil {
+		fmt.Printf("failed to read key file: %s\n", err)
+	} else {
+		privKey = ed25519.PrivateKey(privKeyRaw)
+	}
 	d, err := godave.NewDave(&godave.Cfg{
 		UdpListenAddr: laddr,
 		Edges:         addrs,
@@ -79,34 +88,40 @@ func main() {
 		switch flag.Arg(0) {
 		case "version":
 			fmt.Printf("commit %s\n", commit)
-		case "set":
+		case "keygen":
 			if flag.NArg() < 2 {
-				exit(1, "missing argument: set <VAL>")
+				exit(1, "missing argument: keygen <FILENAME>")
 			}
-			set(d, []byte(flag.Arg(1)), uint8(*difficulty), *rounds, *npeer, *ntest)
+			_, priv, err := ed25519.GenerateKey(rand.Reader)
+			if err != nil {
+				exit(1, "failed to generate key: %s", err)
+			}
+			// TODO: encrypt key with passphrase
+			os.WriteFile(flag.Arg(1), priv, 0600) // W/R by owner only
+		case "set":
+			if flag.NArg() < 3 {
+				exit(1, "missing arguments: set <KEY> <VAL>")
+			}
+			set(d, []byte(flag.Arg(1)), []byte(flag.Arg(2)), privKey, uint8(*difficulty), *rounds, *npeer, *ntest)
 			return
 		case "setf":
-			if flag.NArg() < 2 {
-				exit(1, "missing argument: setf <FILENAME>")
+			if flag.NArg() < 3 {
+				exit(1, "missing arguments: setf <KEY> <FILENAME>")
 			}
-			data, err := os.ReadFile(flag.Arg(1))
+			data, err := os.ReadFile(flag.Arg(2))
 			if err != nil {
 				exit(2, "error reading file: %v", err)
 			}
-			set(d, data, uint8(*difficulty), *rounds, *npeer, *ntest)
+			set(d, []byte(flag.Arg(1)), data, privKey, uint8(*difficulty), *rounds, *npeer, *ntest)
 		case "get":
 			if flag.NArg() < 2 {
 				exit(1, "correct usage is get <WORK>")
 			}
-			work, err := hex.DecodeString(flag.Arg(1))
-			if err != nil {
-				exit(1, "invalid input <WORK>: %v", err)
-			}
 			tstart := time.Now()
 			var found bool
-			for dat := range d.Get(work, int32(*npeer), *timeout) {
+			for dat := range d.Get([]byte(flag.Arg(1)), int32(*npeer), *timeout) {
 				found = true
-				fmt.Println(string(dat.V))
+				fmt.Println(string(dat.Val))
 				if *stat {
 					fmt.Printf("t: %s\n", time.Since(tstart))
 				}
@@ -174,7 +189,7 @@ func parseAddrPort(addrport string) (netip.AddrPort, error) {
 	return parsed, nil
 }
 
-func set(d *godave.Dave, val []byte, difficulty uint8, rounds, npeer, ntest int) {
+func set(d *godave.Dave, key, val []byte, privKey ed25519.PrivateKey, difficulty uint8, rounds, npeer, ntest int) {
 	done := make(chan struct{})
 	start := time.Now()
 	go func() {
@@ -189,8 +204,8 @@ func set(d *godave.Dave, val []byte, difficulty uint8, rounds, npeer, ntest int)
 		}
 	}()
 	type chal struct {
-		v  []byte
-		ti time.Time
+		k, v []byte
+		ti   time.Time
 	}
 	type sol struct{ work, salt []byte }
 	chalch := make(chan chal, 1)
@@ -198,19 +213,22 @@ func set(d *godave.Dave, val []byte, difficulty uint8, rounds, npeer, ntest int)
 	for nroutine := 0; nroutine < runtime.NumCPU(); nroutine++ {
 		go func(chalch <-chan chal) {
 			for c := range chalch {
-				work, salt := godave.Work(c.v, godave.Ttb(c.ti), difficulty)
+				work, salt := godave.Work(c.k, c.v, godave.Ttb(c.ti), difficulty)
 				solch <- sol{work, salt}
 			}
 		}(chalch)
 	}
 	for i := 0; i < ntest; i++ {
-		dat := &godave.Dat{V: val, Ti: time.Now()}
-		chalch <- chal{dat.V, dat.Ti}
+		// 100ms margin, incase clocks are not well synchronised
+		dat := &godave.Dat{Key: key, Val: val, Time: time.Now().Add(-100 * time.Millisecond)}
+		chalch <- chal{dat.Key, dat.Val, dat.Time}
 		s := <-solch
-		dat.W = s.work
-		dat.S = s.salt
+		dat.Work = s.work
+		dat.Salt = s.salt
+		dat.Sig = ed25519.Sign(privKey, dat.Work)
+		dat.PubKey = privKey.Public().(ed25519.PublicKey)
 		<-d.Set(dat, int32(rounds), int32(npeer))
-		fmt.Printf("\r%x\n", dat.W)
+		fmt.Printf("\r\nput %s\n", dat.Key)
 	}
 	time.Sleep(time.Second) // wait for send to finish
 	done <- struct{}{}
