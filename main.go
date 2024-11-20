@@ -32,8 +32,7 @@ func main() {
 	keyFname := flag.String("key", "key.dave", "Private key filename")
 	difficulty := flag.Uint("d", godave.MINWORK, "For set command. Number of leading zero bits.")
 	flush := flag.Bool("f", false, "Flush log buffer after each write.")
-	shardCap := flag.Int("shardcap", 100000, "Shard capacity. Each shard corresponds to a difficulty level.")
-	rounds := flag.Int("rounds", 3, "For set command. Number of times to repeat sending dat.")
+	shardCap := flag.Int("shardcap", 10000, "Shard capacity. There are 256 shards.")
 	npeer := flag.Int("npeer", 3, "For set & get commands. Number of peers to wait for before sending messages.")
 	ntest := flag.Int("ntest", 1, "For set command. Repeat work & send n times. For testing.")
 	timeout := flag.Duration("timeout", 10*time.Second, "Timeout for get command.")
@@ -102,7 +101,7 @@ func main() {
 			if flag.NArg() < 3 {
 				exit(1, "missing arguments: set <KEY> <VAL>")
 			}
-			set(d, []byte(flag.Arg(1)), []byte(flag.Arg(2)), privKey, uint8(*difficulty), *rounds, *npeer, *ntest)
+			set(d, []byte(flag.Arg(1)), []byte(flag.Arg(2)), privKey, uint8(*difficulty), *npeer, *ntest)
 			return
 		case "setf":
 			if flag.NArg() < 3 {
@@ -112,7 +111,7 @@ func main() {
 			if err != nil {
 				exit(2, "error reading file: %v", err)
 			}
-			set(d, []byte(flag.Arg(1)), data, privKey, uint8(*difficulty), *rounds, *npeer, *ntest)
+			set(d, []byte(flag.Arg(1)), data, privKey, uint8(*difficulty), *npeer, *ntest)
 		case "get":
 			if flag.NArg() < 2 {
 				exit(1, "correct usage is get <WORK>")
@@ -189,7 +188,7 @@ func parseAddrPort(addrport string) (netip.AddrPort, error) {
 	return parsed, nil
 }
 
-func set(d *godave.Dave, key, val []byte, privKey ed25519.PrivateKey, difficulty uint8, rounds, npeer, ntest int) {
+func set(d *godave.Dave, key, val []byte, privKey ed25519.PrivateKey, difficulty uint8, npeer, ntest int) {
 	done := make(chan struct{})
 	start := time.Now()
 	go func() {
@@ -218,17 +217,21 @@ func set(d *godave.Dave, key, val []byte, privKey ed25519.PrivateKey, difficulty
 			}
 		}(chalch)
 	}
+	keyInc := key
 	for i := 0; i < ntest; i++ {
+		if i > 0 {
+			keyInc = []byte(fmt.Sprintf("%s_%d", key, i))
+		}
 		// 100ms margin, incase clocks are not well synchronised
-		dat := &godave.Dat{Key: key, Val: val, Time: time.Now().Add(-100 * time.Millisecond)}
+		dat := &godave.Dat{Key: keyInc, Val: val, Time: time.Now().Add(-100 * time.Millisecond)}
 		chalch <- chal{dat.Key, dat.Val, dat.Time}
 		s := <-solch
 		dat.Work = s.work
 		dat.Salt = s.salt
 		dat.Sig = ed25519.Sign(privKey, dat.Work)
 		dat.PubKey = privKey.Public().(ed25519.PublicKey)
-		<-d.Set(dat, int32(rounds), int32(npeer))
-		fmt.Printf("\r\nput %s\n", dat.Key)
+		<-d.Set(dat, int32(npeer))
+		fmt.Printf("\r\nput %s", dat.Key)
 	}
 	time.Sleep(time.Second) // wait for send to finish
 	done <- struct{}{}
