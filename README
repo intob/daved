@@ -6,9 +6,10 @@ Flags:
 -e :2001                Bootstrap to port, local machine is inferred
 -e 12.34.56.78:127      Bootstrap to ip:port
 -e edge:127             Bootstrap to hostname:port
+-key key.dave           For set command. Private key used to sign dats.
+-d 16                   For set command. Difficulty of poof-of-work in number of leading zero bits.
 -b backup.dave          Set backup file to enable writing to disk.
 -f                      Flush buffer after each log message is written to stdout.
--d 16                   For set command. Difficulty of poof-of-work in number of leading zero bits.
 
 There are more flags, but these are important. Look in the main function or use -help flag.
 
@@ -17,6 +18,7 @@ The default operating mode is running as a node.
 Modes:
 daved
 daved version
-daved set hello_dave
-daved setf myfile.txt
-daved get $HASH
+daved keygen <FILENAME>
+daved set <KEY> <VALUE>
+daved setf <KEY> <FILENAME>
+daved get <KEY>
