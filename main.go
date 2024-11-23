@@ -195,7 +195,7 @@ func set(d *godave.Dave, key, val []byte, privKey ed25519.PrivateKey, opt *cmdOp
 		}
 		// 100ms margin, incase clocks are not well synchronised
 		dat := &godave.Dat{Key: keyInc, Val: val, Time: time.Now().Add(-100 * time.Millisecond)}
-		dat.Work, dat.Salt = godave.Work(dat.Key, dat.Val, godave.Ttb(dat.Time), opt.Difficulty)
+		dat.Work, dat.Salt = godave.DoWork(dat.Key, dat.Val, godave.Ttb(dat.Time), opt.Difficulty)
 		dat.Sig = ed25519.Sign(privKey, dat.Work)
 		dat.PubKey = privKey.Public().(ed25519.PublicKey)
 		waitForPeers(d, int32(opt.NPeer))
