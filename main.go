@@ -30,40 +30,6 @@ type cmdOptions struct {
 	Timeout     time.Duration
 }
 
-func parseFlags() (*cmdOptions, *cfg.NodeCfgUnparsed, string) {
-	cfgFilename := flag.String("cfg", "", "Config filename")
-	// CLI flags
-	keyFname := flag.String("key", "key.dave", "Private key filename")
-	difficulty := flag.Uint("d", godave.MINWORK, "For set command. Number of leading zero bits.")
-	npeer := flag.Int("npeer", 3, "For set command. Number of peers to wait for before sending.")
-	ntest := flag.Int("ntest", 1, "For set command. Repeat work & send n times. For testing.")
-	timeout := flag.Duration("timeout", 10*time.Second, "Timeout for get command.")
-	// Node flags
-	udpLaddr := flag.String("udp_listen_addr", "", "Listen address:port")
-	edges := flag.String("edges", "", "Comma-separated bootstrap address:port")
-	backup := flag.String("backup_filename", "", "Backup file, set to enable.")
-	shardCap := flag.Int("shard_cap", 0, "Shard capacity. There are 256 shards.")
-	logLevel := flag.String("log_level", "", "Log level ERROR or DEBUG.")
-	flush := flag.String("flush_log_buffer", "", "Flush log buffer after each write.")
-	flag.Parse()
-	opt := &cmdOptions{
-		KeyFilename: *keyFname,
-		Difficulty:  uint8(*difficulty),
-		NPeer:       *npeer,
-		Ntest:       *ntest,
-		Timeout:     *timeout,
-	}
-	cfg := &cfg.NodeCfgUnparsed{
-		UdpListenAddr:  *udpLaddr,
-		Edges:          strings.Split(*edges, ","),
-		BackupFilename: *backup,
-		ShardCap:       *shardCap,
-		LogLevel:       *logLevel,
-		FlushLogBuffer: *flush,
-	}
-	return opt, cfg, *cfgFilename
-}
-
 func main() {
 	// Parse & merge configuration
 	opt, cfgFlags, cfgFilename := parseFlags()
@@ -169,6 +135,40 @@ func main() {
 		<-d.Kill()
 		fmt.Println("shutdown gracefully")
 	}
+}
+
+func parseFlags() (*cmdOptions, *cfg.NodeCfgUnparsed, string) {
+	cfgFilename := flag.String("cfg", "", "Config filename")
+	// CLI flags
+	keyFname := flag.String("key", "key.dave", "Private key filename")
+	difficulty := flag.Uint("d", godave.MINWORK, "For set command. Number of leading zero bits.")
+	npeer := flag.Int("npeer", 3, "For set command. Number of peers to wait for before sending.")
+	ntest := flag.Int("ntest", 1, "For set command. Repeat work & send n times. For testing.")
+	timeout := flag.Duration("timeout", 10*time.Second, "Timeout for get command.")
+	// Node flags
+	udpLaddr := flag.String("udp_listen_addr", "", "Listen address:port")
+	edges := flag.String("edges", "", "Comma-separated bootstrap address:port")
+	backup := flag.String("backup_filename", "", "Backup file, set to enable.")
+	shardCap := flag.Int("shard_cap", 0, "Shard capacity. There are 256 shards.")
+	logLevel := flag.String("log_level", "", "Log level ERROR or DEBUG.")
+	flush := flag.String("flush_log_buffer", "", "Flush log buffer after each write.")
+	flag.Parse()
+	opt := &cmdOptions{
+		KeyFilename: *keyFname,
+		Difficulty:  uint8(*difficulty),
+		NPeer:       *npeer,
+		Ntest:       *ntest,
+		Timeout:     *timeout,
+	}
+	cfg := &cfg.NodeCfgUnparsed{
+		UdpListenAddr:  *udpLaddr,
+		Edges:          strings.Split(*edges, ","),
+		BackupFilename: *backup,
+		ShardCap:       *shardCap,
+		LogLevel:       *logLevel,
+		FlushLogBuffer: *flush,
+	}
+	return opt, cfg, *cfgFilename
 }
 
 func set(d *godave.Dave, key, val []byte, privKey ed25519.PrivateKey, opt *cmdOptions) {
