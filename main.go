@@ -113,11 +113,13 @@ func main() {
 	// Execute command or wait for kill sig
 	if flag.NArg() > 0 { // Command mode
 		var privKey ed25519.PrivateKey
+		var pubKey ed25519.PublicKey
 		privKeyRaw, err := os.ReadFile(opt.KeyFilename)
 		if err != nil {
 			fmt.Printf("failed to read key file: %s\n", err)
 		} else {
 			privKey = ed25519.PrivateKey(privKeyRaw)
+			pubKey = privKey.Public().(ed25519.PublicKey)
 		}
 		switch flag.Arg(0) {
 		case "version":
@@ -149,11 +151,11 @@ func main() {
 			set(d, []byte(flag.Arg(1)), data, privKey, opt)
 		case "get":
 			if flag.NArg() < 2 {
-				exit(1, "correct usage is get <WORK>")
+				exit(1, "correct usage is get <KEY>")
 			}
 			tstart := time.Now()
 			var found bool
-			for dat := range d.Get([]byte(flag.Arg(1)), opt.Timeout) {
+			for dat := range d.Get(pubKey, []byte(flag.Arg(1)), opt.Timeout) {
 				found = true
 				fmt.Println(string(dat.Val))
 				fmt.Printf("t: %s\n", time.Since(tstart))
