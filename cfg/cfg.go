@@ -8,7 +8,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/intob/godave"
+	"github.com/intob/godave/logger"
 	"gopkg.in/yaml.v3"
 )
 
@@ -17,7 +17,7 @@ type NodeCfg struct {
 	Edges          []netip.AddrPort
 	BackupFilename string
 	ShardCap       int
-	LogLevel       godave.LogLevel
+	LogLevel       logger.LogLevel
 	FlushLogBuffer bool
 }
 
@@ -94,9 +94,9 @@ func ParseNodeCfg(unparsed *NodeCfgUnparsed) (*NodeCfg, error) {
 	cfg.BackupFilename = withDefaults.BackupFilename
 	cfg.ShardCap = withDefaults.ShardCap
 	if strings.ToUpper(withDefaults.LogLevel) == "DEBUG" {
-		cfg.LogLevel = godave.LOGLEVEL_DEBUG
+		cfg.LogLevel = logger.DEBUG
 	} else {
-		cfg.LogLevel = godave.LOGLEVEL_ERROR
+		cfg.LogLevel = logger.ERROR
 	}
 	if withDefaults.FlushLogBuffer != "" {
 		cfg.FlushLogBuffer = true

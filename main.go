@@ -14,9 +14,12 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/intob/daved/api"
 	"github.com/intob/daved/cfg"
 	"github.com/intob/godave"
-	"github.com/intob/jfmt"
+	"github.com/intob/godave/logger"
+	"github.com/intob/godave/pow"
+	"github.com/intob/godave/store"
 )
 
 //go:embed commit
@@ -47,16 +50,16 @@ func main() {
 	}
 
 	// Logging
-	lch := make(chan string, 1)
-	if flag.NArg() == 0 || nodeCfg.LogLevel == godave.LOGLEVEL_DEBUG {
+	logs := make(chan string, 1)
+	if flag.NArg() == 0 || nodeCfg.LogLevel == logger.DEBUG {
 		go func() {
 			if nodeCfg.FlushLogBuffer {
-				for l := range lch {
+				for l := range logs {
 					fmt.Println(l)
 				}
 			} else {
 				dlw := bufio.NewWriter(os.Stdout)
-				for l := range lch {
+				for l := range logs {
 					fmt.Fprintln(dlw, l)
 				}
 			}
@@ -69,8 +72,10 @@ func main() {
 		Edges:         nodeCfg.Edges,
 		ShardCap:      nodeCfg.ShardCap,
 		BackupFname:   nodeCfg.BackupFilename,
-		LogLevel:      nodeCfg.LogLevel,
-		Log:           lch,
+		Logger: logger.NewLogger(&logger.LoggerCfg{
+			Level:  nodeCfg.LogLevel,
+			Output: logs,
+		}),
 	})
 	if err != nil {
 		exit(1, "failed to make dave: %v", err)
@@ -79,13 +84,13 @@ func main() {
 	// Execute command or wait for kill sig
 	if flag.NArg() > 0 { // Command mode
 		var privKey ed25519.PrivateKey
-		var pubKey ed25519.PublicKey
+		//var pubKey ed25519.PublicKey
 		privKeyRaw, err := os.ReadFile(opt.KeyFilename)
 		if err != nil {
 			fmt.Printf("failed to read key file: %s\n", err)
 		} else {
 			privKey = ed25519.PrivateKey(privKeyRaw)
-			pubKey = privKey.Public().(ed25519.PublicKey)
+			//pubKey = privKey.Public().(ed25519.PublicKey)
 		}
 		switch flag.Arg(0) {
 		case "version":
@@ -100,22 +105,13 @@ func main() {
 			}
 			// TODO: encrypt key with passphrase
 			os.WriteFile(flag.Arg(1), priv, 0600) // W/R by owner only
-		case "set":
+		case "put":
 			if flag.NArg() < 3 {
-				exit(1, "missing arguments: set <KEY> <VAL>")
+				exit(1, "missing arguments: put <KEY> <VAL>")
 			}
-			set(d, []byte(flag.Arg(1)), []byte(flag.Arg(2)), privKey, opt)
+			put(d, []byte(flag.Arg(1)), []byte(flag.Arg(2)), privKey, opt)
 			return
-		case "setf":
-			if flag.NArg() < 3 {
-				exit(1, "missing arguments: setf <KEY> <FILENAME>")
-			}
-			data, err := os.ReadFile(flag.Arg(2))
-			if err != nil {
-				exit(2, "error reading file: %v", err)
-			}
-			set(d, []byte(flag.Arg(1)), data, privKey, opt)
-		case "get":
+			/*case "get":
 			if flag.NArg() < 2 {
 				exit(1, "correct usage is get <KEY>")
 			}
@@ -129,8 +125,18 @@ func main() {
 			if !found {
 				exit(1, "dat not found")
 			}
+			*/
 		}
 	} else { // Node mode, wait for kill sig
+		svc := api.NewService(&api.Cfg{
+			ListenAddr: "127.0.0.1:8080",
+			Logs:       logs,
+			Dave:       d,
+		})
+		err := svc.Start()
+		if err != nil {
+			exit(1, "failed to start http server: %s", err)
+		}
 		<-getCtx().Done()
 		<-d.Kill()
 		fmt.Println("shutdown gracefully")
@@ -141,7 +147,7 @@ func parseFlags() (*cmdOptions, *cfg.NodeCfgUnparsed, string) {
 	cfgFilename := flag.String("cfg", "", "Config filename")
 	// CLI flags
 	keyFname := flag.String("key", "key.dave", "Private key filename")
-	difficulty := flag.Uint("d", godave.MINWORK, "For set command. Number of leading zero bits.")
+	difficulty := flag.Uint("d", godave.MIN_WORK, "For set command. Number of leading zero bits.")
 	npeer := flag.Int("npeer", 3, "For set command. Number of peers to wait for before sending.")
 	ntest := flag.Int("ntest", 1, "For set command. Repeat work & send n times. For testing.")
 	timeout := flag.Duration("timeout", 10*time.Second, "Timeout for get command.")
@@ -171,7 +177,7 @@ func parseFlags() (*cmdOptions, *cfg.NodeCfgUnparsed, string) {
 	return opt, cfg, *cfgFilename
 }
 
-func set(d *godave.Dave, key, val []byte, privKey ed25519.PrivateKey, opt *cmdOptions) {
+func put(d *godave.Dave, key, val []byte, privKey ed25519.PrivateKey, opt *cmdOptions) {
 	done := make(chan struct{}, 1)
 	if opt.Ntest == 1 { // don't log time if we're sending loads to test
 		start := time.Now()
@@ -183,7 +189,7 @@ func set(d *godave.Dave, key, val []byte, privKey ed25519.PrivateKey, opt *cmdOp
 					fmt.Printf("\rdone\033[0K")
 					return
 				case <-tick.C:
-					fmt.Printf("\rworking for %s\033[0K", jfmt.FmtDuration(time.Since(start)))
+					fmt.Printf("\rworking for %s\033[0K", time.Since(start))
 				}
 			}
 		}()
@@ -194,22 +200,22 @@ func set(d *godave.Dave, key, val []byte, privKey ed25519.PrivateKey, opt *cmdOp
 			keyInc = []byte(fmt.Sprintf("%s_%d", key, i))
 		}
 		// 100ms margin, incase clocks are not well synchronised
-		dat := &godave.Dat{Key: keyInc, Val: val, Time: time.Now().Add(-100 * time.Millisecond)}
-		dat.Work, dat.Salt = godave.DoWork(dat.Key, dat.Val, godave.Ttb(dat.Time), opt.Difficulty)
+		dat := &store.Dat{Key: keyInc, Val: val, Time: time.Now().Add(-100 * time.Millisecond)}
+		dat.Work, dat.Salt = pow.DoWork(dat.Key, dat.Val, pow.Ttb(dat.Time), opt.Difficulty)
 		dat.Sig = ed25519.Sign(privKey, dat.Work)
 		dat.PubKey = privKey.Public().(ed25519.PublicKey)
-		waitForPeers(d, int32(opt.NPeer))
-		<-d.Set(dat)
+		waitForPeers(d, opt.NPeer)
+		<-d.Put(dat)
 		if opt.Ntest > 1 {
-			fmt.Printf("\r\nput %s\n", dat.Key)
+			fmt.Printf("\rput %s\n", dat.Key)
 		}
 	}
 	done <- struct{}{}
 }
 
-func waitForPeers(d *godave.Dave, npeer int32) {
+func waitForPeers(d *godave.Dave, npeer int) {
 	for {
-		if d.PeerCount() >= npeer {
+		if d.Peers.Count() >= npeer {
 			return
 		}
 		time.Sleep(200 * time.Millisecond)
