@@ -28,7 +28,6 @@ var commit string
 type cmdOptions struct {
 	KeyFilename string
 	Difficulty  uint8
-	NPeer       int
 	Ntest       int
 	Timeout     time.Duration
 }
@@ -148,7 +147,6 @@ func parseFlags() (*cmdOptions, *cfg.NodeCfgUnparsed, string) {
 	// CLI flags
 	keyFname := flag.String("key", "key.dave", "Private key filename")
 	difficulty := flag.Uint("d", godave.MIN_WORK, "For set command. Number of leading zero bits.")
-	npeer := flag.Int("npeer", 3, "For set command. Number of peers to wait for before sending.")
 	ntest := flag.Int("ntest", 1, "For set command. Repeat work & send n times. For testing.")
 	timeout := flag.Duration("timeout", 10*time.Second, "Timeout for get command.")
 	// Node flags
@@ -162,7 +160,6 @@ func parseFlags() (*cmdOptions, *cfg.NodeCfgUnparsed, string) {
 	opt := &cmdOptions{
 		KeyFilename: *keyFname,
 		Difficulty:  uint8(*difficulty),
-		NPeer:       *npeer,
 		Ntest:       *ntest,
 		Timeout:     *timeout,
 	}
@@ -204,22 +201,13 @@ func put(d *godave.Dave, key, val []byte, privKey ed25519.PrivateKey, opt *cmdOp
 		dat.Work, dat.Salt = pow.DoWork(dat.Key, dat.Val, pow.Ttb(dat.Time), opt.Difficulty)
 		dat.Sig = ed25519.Sign(privKey, dat.Work)
 		dat.PubKey = privKey.Public().(ed25519.PublicKey)
-		waitForPeers(d, opt.NPeer)
-		<-d.Put(dat)
+		<-d.Put(*dat)
 		if opt.Ntest > 1 {
 			fmt.Printf("\rput %s\n", dat.Key)
 		}
 	}
+	time.Sleep(50 * time.Millisecond) // Let sending finish (will improve this)
 	done <- struct{}{}
-}
-
-func waitForPeers(d *godave.Dave, npeer int) {
-	for {
-		if d.Peers.Count() >= npeer {
-			return
-		}
-		time.Sleep(200 * time.Millisecond)
-	}
 }
 
 func exit(code int, msg string, args ...any) {

@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 	"time"
 
@@ -26,7 +27,7 @@ type Cfg struct {
 }
 
 type status struct {
-	Peers int    `json:"peers"`
+	Peers int32  `json:"peers"`
 	Dats  uint32 `json:"dats"`
 }
 
@@ -42,7 +43,7 @@ type datWorkResp struct {
 	Work string `json:"work"`
 }
 
-type datPutReq struct {
+type datEntry struct {
 	Key    string `json:"key"`
 	Val    string `json:"val"`
 	Time   int64  `json:"time"` // Unix milli
@@ -50,6 +51,16 @@ type datPutReq struct {
 	Work   string `json:"work"`
 	PubKey string `json:"pubKey"`
 	Sig    string `json:"sig"`
+}
+
+type datListReq struct {
+	KeyPrefix string `json:"keyPrefix"`
+	PubKey    string `json:"pubKey"`
+}
+
+type datListResp struct {
+	Results []*datEntry `json:"results"`
+	Count   int         `json:"count"`
 }
 
 func NewService(cfg *Cfg) *Service {
@@ -61,26 +72,38 @@ func NewService(cfg *Cfg) *Service {
 	http.Handle("/", corsMiddleware(http.HandlerFunc(svc.handleGetStatus)))
 	http.Handle("/status", corsMiddleware(http.HandlerFunc(svc.handleGetStatus)))
 	http.Handle("/work", corsMiddleware(http.HandlerFunc(svc.handleDoWork)))
-	http.Handle("/put", corsMiddleware(http.HandlerFunc(svc.handlePut)))
+	http.Handle("/put", corsMiddleware(http.HandlerFunc(svc.handlePostPut)))
+	http.Handle("/list", corsMiddleware(http.HandlerFunc(svc.handlePostList)))
 	http.Handle("/ws", corsMiddleware(http.HandlerFunc(svc.handleWebsocketConnection)))
 	return svc
 }
 
 func (svc *Service) Start() error {
 	errChan := make(chan error, 1)
+	addrChan := make(chan string, 1)
 	go func() {
-		err := http.ListenAndServe(svc.listenAddr, nil)
+		listener, err := net.Listen("tcp", svc.listenAddr)
 		if err != nil {
+			listener, err = net.Listen("tcp", "127.0.0.1:0")
+			if err != nil {
+				errChan <- err
+				return
+			}
+		}
+		addrChan <- listener.Addr().String()
+		if err := http.Serve(listener, nil); err != nil {
 			errChan <- err
 		}
 	}()
-	time.Sleep(50 * time.Millisecond)
 	select {
 	case err := <-errChan:
 		return err
-	default:
-		svc.log("started http server on %s", svc.listenAddr)
+	case addr := <-addrChan:
+		svc.listenAddr = addr
+		svc.log("started http server on %s", addr)
 		return nil
+	case <-time.After(50 * time.Millisecond):
+		return fmt.Errorf("timeout waiting for server to start")
 	}
 }
 
@@ -123,10 +146,14 @@ func (svc *Service) handleDoWork(w http.ResponseWriter, r *http.Request) {
 	w.Write(respJson)
 }
 
-func (svc *Service) handlePut(w http.ResponseWriter, r *http.Request) {
+func (svc *Service) handlePostPut(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "POST" {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
 	defer r.Body.Close()
 	dec := json.NewDecoder(r.Body)
-	req := &datPutReq{}
+	req := &datEntry{}
 	err := dec.Decode(req)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
@@ -163,7 +190,7 @@ func (svc *Service) handlePut(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(fmt.Sprintf("failed to decode base64 sig: %s", err)))
 		return
 	}
-	<-svc.dave.Put(&store.Dat{
+	<-svc.dave.Put(store.Dat{
 		Key:    key,
 		Val:    []byte(req.Val),
 		Time:   time.UnixMilli(req.Time),
@@ -174,10 +201,61 @@ func (svc *Service) handlePut(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (svc *Service) handlePostList(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "POST" {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+	defer r.Body.Close()
+	dec := json.NewDecoder(r.Body)
+	req := &datListReq{}
+	err := dec.Decode(req)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(fmt.Sprintf("failed to decode request body: %s", err)))
+		return
+	}
+	keyPrefix, err := base64.RawURLEncoding.DecodeString(req.KeyPrefix)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(fmt.Sprintf("failed to decode base64 key: %s", err)))
+		return
+	}
+	pubKey, err := base64.RawURLEncoding.DecodeString(req.PubKey)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(fmt.Sprintf("failed to decode base64 pub key: %s", err)))
+		return
+	}
+	results := svc.dave.Store.List(ed25519.PublicKey(pubKey), keyPrefix)
+	resultsConverted := make([]*datEntry, 0, len(results))
+	for _, result := range results {
+		resultsConverted = append(resultsConverted, &datEntry{
+			Key:    base64.RawURLEncoding.EncodeToString(result.Key),
+			Val:    base64.RawURLEncoding.EncodeToString(result.Val),
+			Salt:   base64.RawURLEncoding.EncodeToString(result.Salt),
+			Time:   result.Time.UnixMilli(),
+			Work:   base64.RawURLEncoding.EncodeToString(result.Work),
+			PubKey: base64.RawURLEncoding.EncodeToString(result.PubKey),
+			Sig:    base64.RawURLEncoding.EncodeToString(result.Sig),
+		})
+	}
+	resp := &datListResp{
+		Results: resultsConverted,
+		Count:   len(results),
+	}
+	marshalled, err := json.MarshalIndent(resp, "", "  ")
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	w.Write(marshalled)
+}
+
 func (svc *Service) handleGetStatus(w http.ResponseWriter, r *http.Request) {
 	stat := &status{
-		Peers: svc.dave.Peers.Count(),
-		Dats:  svc.dave.Store.Count(),
+		//Peers: svc.dave.Peers.Count(),
+		Dats: svc.dave.Store.Count(),
 	}
 	resp, err := json.MarshalIndent(stat, "", "  ")
 	if err != nil {

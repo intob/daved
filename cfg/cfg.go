@@ -113,7 +113,7 @@ func parseAddrPortOrHostname(edge string) ([]netip.AddrPort, error) {
 	port := edge[portStart+1:]
 	host := edge[:portStart]
 	if host == "" { // default to local machine
-		host = "127.0.0.1"
+		host = "::ffff:127.0.0.1"
 	}
 	ip := net.ParseIP(host)
 	if ip != nil { // host is an IP address
