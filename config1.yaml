@@ -1,7 +1,7 @@
 udp_listen_addr: ":1001"
 edges:
   - pi1.local:1601
-shard_cap: 1000
+shard_cap: 10000
 flush_log_buffer: true
-backup_filename: backup1
+#backup_filename: backup1
 #log_level: DEBUG

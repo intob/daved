@@ -26,10 +26,10 @@ import (
 var commit string
 
 type cmdOptions struct {
-	KeyFilename string
-	Difficulty  uint8
-	Ntest       int
-	Timeout     time.Duration
+	DataKeyFilename string
+	Difficulty      uint8
+	Ntest           int
+	Timeout         time.Duration
 }
 
 func main() {
@@ -48,67 +48,38 @@ func main() {
 		exit(1, "failed to parse config: %s", err)
 	}
 
-	// Logging
-	logs := make(chan string, 1)
-	if flag.NArg() == 0 || nodeCfg.LogLevel == logger.DEBUG {
-		go func() {
-			if nodeCfg.FlushLogBuffer {
-				for l := range logs {
-					fmt.Println(l)
-				}
-			} else {
-				dlw := bufio.NewWriter(os.Stdout)
-				for l := range logs {
-					fmt.Fprintln(dlw, l)
-				}
-			}
-		}()
-	}
-
-	// Init node
-	d, err := godave.NewDave(&godave.Cfg{
-		UdpListenAddr: nodeCfg.UdpListenAddr,
-		Edges:         nodeCfg.Edges,
-		ShardCap:      nodeCfg.ShardCap,
-		BackupFname:   nodeCfg.BackupFilename,
-		Logger: logger.NewLogger(&logger.LoggerCfg{
-			Level:  nodeCfg.LogLevel,
-			Output: logs,
-		}),
-	})
-	if err != nil {
-		exit(1, "failed to make dave: %v", err)
-	}
-
 	// Execute command or wait for kill sig
 	if flag.NArg() > 0 { // Command mode
-		var privKey ed25519.PrivateKey
-		//var pubKey ed25519.PublicKey
-		privKeyRaw, err := os.ReadFile(opt.KeyFilename)
-		if err != nil {
-			fmt.Printf("failed to read key file: %s\n", err)
-		} else {
-			privKey = ed25519.PrivateKey(privKeyRaw)
-			//pubKey = privKey.Public().(ed25519.PublicKey)
-		}
 		switch flag.Arg(0) {
 		case "version":
 			fmt.Printf("commit %s\n", commit)
 		case "keygen":
+			filename := cfg.DEFAULT_KEY_FILENAME
 			if flag.NArg() < 2 {
-				exit(1, "missing argument: keygen <FILENAME>")
+				fmt.Printf("no filename provided, using default: %s\n", filename)
+			} else {
+				filename = flag.Arg(1)
 			}
 			_, priv, err := ed25519.GenerateKey(rand.Reader)
 			if err != nil {
 				exit(1, "failed to generate key: %s", err)
 			}
 			// TODO: encrypt key with passphrase
-			os.WriteFile(flag.Arg(1), priv, 0600) // W/R by owner only
+			os.WriteFile(filename, priv, 0600) // W/R by owner only
 		case "put":
+			d, _, err := initNode(nodeCfg)
+			if err != nil {
+				exit(1, "failed to init node: %s", err)
+			}
+			dataPrivateKey, err := cfg.ReadKeyFile(opt.DataKeyFilename)
+			if err != nil {
+				fmt.Printf("failed to read key file: %s\n", err)
+				return
+			}
 			if flag.NArg() < 3 {
 				exit(1, "missing arguments: put <KEY> <VAL>")
 			}
-			put(d, []byte(flag.Arg(1)), []byte(flag.Arg(2)), privKey, opt)
+			put(d, []byte(flag.Arg(1)), []byte(flag.Arg(2)), dataPrivateKey, opt)
 			return
 			/*case "get":
 			if flag.NArg() < 2 {
@@ -127,12 +98,16 @@ func main() {
 			*/
 		}
 	} else { // Node mode, wait for kill sig
+		d, logs, err := initNode(nodeCfg)
+		if err != nil {
+			exit(1, "failed to init node: %s", err)
+		}
 		svc := api.NewService(&api.Cfg{
 			ListenAddr: "127.0.0.1:8080",
 			Logs:       logs,
 			Dave:       d,
 		})
-		err := svc.Start()
+		err = svc.Start()
 		if err != nil {
 			exit(1, "failed to start http server: %s", err)
 		}
@@ -142,14 +117,52 @@ func main() {
 	}
 }
 
+func initNode(nodeCfg *cfg.NodeCfg) (*godave.Dave, chan<- string, error) {
+	logs := make(chan string, 1)
+	if flag.NArg() == 0 || nodeCfg.LogLevel == logger.DEBUG {
+		go func() {
+			if nodeCfg.FlushLogBuffer {
+				for l := range logs {
+					fmt.Println(l)
+				}
+			} else {
+				dlw := bufio.NewWriter(os.Stdout)
+				for l := range logs {
+					fmt.Fprintln(dlw, l)
+				}
+			}
+		}()
+	}
+	key, err := cfg.ReadKeyFile(nodeCfg.KeyFilename)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to load key file: %s", err)
+	}
+	d, err := godave.NewDave(&godave.Cfg{
+		PrivateKey:     key,
+		UdpListenAddr:  nodeCfg.UdpListenAddr,
+		Edges:          nodeCfg.Edges,
+		ShardCap:       nodeCfg.ShardCap,
+		BackupFilename: nodeCfg.BackupFilename,
+		Logger: logger.NewLogger(&logger.LoggerCfg{
+			Level:  nodeCfg.LogLevel,
+			Output: logs,
+		}),
+	})
+	if err != nil {
+		return nil, nil, err
+	}
+	return d, logs, nil
+}
+
 func parseFlags() (*cmdOptions, *cfg.NodeCfgUnparsed, string) {
 	cfgFilename := flag.String("cfg", "", "Config filename")
 	// CLI flags
-	keyFname := flag.String("key", "key.dave", "Private key filename")
+	dataKeyFname := flag.String("data_key_filename", cfg.DEFAULT_KEY_FILENAME, "Data private key filename")
 	difficulty := flag.Uint("d", godave.MIN_WORK, "For set command. Number of leading zero bits.")
 	ntest := flag.Int("ntest", 1, "For set command. Repeat work & send n times. For testing.")
 	timeout := flag.Duration("timeout", 10*time.Second, "Timeout for get command.")
 	// Node flags
+	nodeKeyFname := flag.String("node_key_filename", cfg.DEFAULT_KEY_FILENAME, "Node private key filename")
 	udpLaddr := flag.String("udp_listen_addr", "", "Listen address:port")
 	edges := flag.String("edges", "", "Comma-separated bootstrap address:port")
 	backup := flag.String("backup_filename", "", "Backup file, set to enable.")
@@ -158,12 +171,13 @@ func parseFlags() (*cmdOptions, *cfg.NodeCfgUnparsed, string) {
 	flush := flag.String("flush_log_buffer", "", "Flush log buffer after each write.")
 	flag.Parse()
 	opt := &cmdOptions{
-		KeyFilename: *keyFname,
-		Difficulty:  uint8(*difficulty),
-		Ntest:       *ntest,
-		Timeout:     *timeout,
+		DataKeyFilename: *dataKeyFname,
+		Difficulty:      uint8(*difficulty),
+		Ntest:           *ntest,
+		Timeout:         *timeout,
 	}
 	cfg := &cfg.NodeCfgUnparsed{
+		KeyFilename:    *nodeKeyFname,
 		UdpListenAddr:  *udpLaddr,
 		Edges:          strings.Split(*edges, ","),
 		BackupFilename: *backup,

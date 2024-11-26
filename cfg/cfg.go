@@ -1,6 +1,7 @@
 package cfg
 
 import (
+	"crypto/ed25519"
 	"errors"
 	"fmt"
 	"net"
@@ -12,7 +13,17 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+const DEFAULT_KEY_FILENAME = "key.dave"
+
+var defaultCfgUnparsed = NodeCfgUnparsed{
+	KeyFilename:   DEFAULT_KEY_FILENAME,
+	UdpListenAddr: "[::]:127",
+	ShardCap:      10_000,
+	LogLevel:      "ERROR",
+}
+
 type NodeCfg struct {
+	KeyFilename    string
 	UdpListenAddr  *net.UDPAddr
 	Edges          []netip.AddrPort
 	BackupFilename string
@@ -22,18 +33,13 @@ type NodeCfg struct {
 }
 
 type NodeCfgUnparsed struct {
+	KeyFilename    string   `yaml:"key_filename"`
 	UdpListenAddr  string   `yaml:"udp_listen_addr"`
 	Edges          []string `yaml:"edges"`
 	BackupFilename string   `yaml:"backup_filename"`
 	ShardCap       int      `yaml:"shard_cap"`
 	LogLevel       string   `yaml:"log_level"`
 	FlushLogBuffer string   `yaml:"flush_log_buffer"`
-}
-
-var defaultCfgUnparsed = NodeCfgUnparsed{
-	UdpListenAddr: "[::]:127",
-	ShardCap:      10_000,
-	LogLevel:      "ERROR",
 }
 
 func ReadNodeCfgFile(filename string) (*NodeCfgUnparsed, error) {
@@ -50,32 +56,41 @@ func ReadNodeCfgFile(filename string) (*NodeCfgUnparsed, error) {
 	return cfg, nil
 }
 
-func MergeConfigs(a, b NodeCfgUnparsed) *NodeCfgUnparsed {
-	if b.UdpListenAddr != "" {
-		a.UdpListenAddr = b.UdpListenAddr
+// Merges src with dst.
+// If a field in src is omitted, the value in dst is left unchanged.
+func MergeConfigs(dst, src NodeCfgUnparsed) *NodeCfgUnparsed {
+	if src.KeyFilename != "" {
+		dst.KeyFilename = src.KeyFilename
 	}
-	if len(b.Edges) > 0 {
-		a.Edges = append(a.Edges, b.Edges...)
+	if src.UdpListenAddr != "" {
+		dst.UdpListenAddr = src.UdpListenAddr
 	}
-	if b.BackupFilename != "" {
-		a.BackupFilename = b.BackupFilename
+	if len(src.Edges) > 0 {
+		dst.Edges = append(dst.Edges, src.Edges...)
 	}
-	if b.ShardCap != 0 {
-		a.ShardCap = b.ShardCap
+	if src.BackupFilename != "" {
+		dst.BackupFilename = src.BackupFilename
 	}
-	if b.LogLevel != "" {
-		a.LogLevel = b.LogLevel
+	if src.ShardCap != 0 {
+		dst.ShardCap = src.ShardCap
 	}
-	if b.FlushLogBuffer != "" {
-		a.FlushLogBuffer = b.FlushLogBuffer
+	if src.LogLevel != "" {
+		dst.LogLevel = src.LogLevel
 	}
-	return &a
+	if src.FlushLogBuffer != "" {
+		dst.FlushLogBuffer = src.FlushLogBuffer
+	}
+	return &dst
 }
 
 func ParseNodeCfg(unparsed *NodeCfgUnparsed) (*NodeCfg, error) {
 	withDefaults := MergeConfigs(defaultCfgUnparsed, *unparsed)
+	cfg := &NodeCfg{
+		KeyFilename:    withDefaults.KeyFilename,
+		BackupFilename: withDefaults.BackupFilename,
+		ShardCap:       withDefaults.ShardCap,
+	}
 	var err error
-	cfg := &NodeCfg{}
 	cfg.UdpListenAddr, err = net.ResolveUDPAddr("udp", withDefaults.UdpListenAddr)
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve UDP listen address: %s", err)
@@ -91,8 +106,7 @@ func ParseNodeCfg(unparsed *NodeCfgUnparsed) (*NodeCfg, error) {
 		}
 		cfg.Edges = append(cfg.Edges, addrs...)
 	}
-	cfg.BackupFilename = withDefaults.BackupFilename
-	cfg.ShardCap = withDefaults.ShardCap
+
 	if strings.ToUpper(withDefaults.LogLevel) == "DEBUG" {
 		cfg.LogLevel = logger.DEBUG
 	} else {
@@ -154,4 +168,15 @@ func parseAddrPort(addrport string) (netip.AddrPort, error) {
 		return parsed, fmt.Errorf("failed to parse addr %q: %w", addrport, err)
 	}
 	return parsed, nil
+}
+
+func ReadKeyFile(filename string) (ed25519.PrivateKey, error) {
+	key, err := os.ReadFile(filename)
+	if err != nil {
+		return nil, err
+	}
+	if len(key) != ed25519.PrivateKeySize {
+		return nil, fmt.Errorf("invalid key file, expected %d bytes, got %d", ed25519.PrivateKeySize, len(key))
+	}
+	return key, nil
 }
