@@ -8,6 +8,7 @@ import (
 	_ "embed"
 	"flag"
 	"fmt"
+	"net"
 	"os"
 	"os/signal"
 	"strings"
@@ -137,9 +138,13 @@ func initNode(nodeCfg *cfg.NodeCfg) (*godave.Dave, chan<- string, error) {
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to load key file: %s", err)
 	}
+	socket, err := net.ListenUDP("udp", nodeCfg.UdpListenAddr)
+	if err != nil {
+		return nil, nil, err
+	}
 	d, err := godave.NewDave(&godave.Cfg{
+		Socket:         socket,
 		PrivateKey:     key,
-		UdpListenAddr:  nodeCfg.UdpListenAddr,
 		Edges:          nodeCfg.Edges,
 		ShardCap:       nodeCfg.ShardCap,
 		BackupFilename: nodeCfg.BackupFilename,
