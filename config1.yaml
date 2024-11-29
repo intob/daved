@@ -5,3 +5,4 @@ shard_cap: 10000
 flush_log_buffer: true
 #backup_filename: backup1
 #log_level: DEBUG
+node_key_filename: key1

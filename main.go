@@ -20,7 +20,7 @@ import (
 	"github.com/intob/godave"
 	"github.com/intob/godave/logger"
 	"github.com/intob/godave/pow"
-	"github.com/intob/godave/store"
+	"github.com/intob/godave/types"
 )
 
 //go:embed commit
@@ -31,6 +31,7 @@ type cmdOptions struct {
 	Difficulty      uint8
 	Ntest           int
 	Timeout         time.Duration
+	PeerCount       int
 }
 
 func main() {
@@ -80,7 +81,7 @@ func main() {
 			if flag.NArg() < 3 {
 				exit(1, "missing arguments: put <KEY> <VAL>")
 			}
-			put(d, []byte(flag.Arg(1)), []byte(flag.Arg(2)), dataPrivateKey, opt)
+			put(d, flag.Arg(1), []byte(flag.Arg(2)), dataPrivateKey, opt)
 			return
 			/*case "get":
 			if flag.NArg() < 2 {
@@ -164,8 +165,9 @@ func parseFlags() (*cmdOptions, *cfg.NodeCfgUnparsed, string) {
 	// CLI flags
 	dataKeyFname := flag.String("data_key_filename", cfg.DEFAULT_KEY_FILENAME, "Data private key filename")
 	difficulty := flag.Uint("d", godave.MIN_WORK, "For set command. Number of leading zero bits.")
-	ntest := flag.Int("ntest", 1, "For set command. Repeat work & send n times. For testing.")
+	ntest := flag.Int("ntest", 1, "For put command. Repeat work & send n times. For testing.")
 	timeout := flag.Duration("timeout", 10*time.Second, "Timeout for get command.")
+	npeer := flag.Int("npeer", 1, "Number of peers to wait for.")
 	// Node flags
 	nodeKeyFname := flag.String("node_key_filename", cfg.DEFAULT_KEY_FILENAME, "Node private key filename")
 	udpLaddr := flag.String("udp_listen_addr", "", "Listen address:port")
@@ -180,6 +182,7 @@ func parseFlags() (*cmdOptions, *cfg.NodeCfgUnparsed, string) {
 		Difficulty:      uint8(*difficulty),
 		Ntest:           *ntest,
 		Timeout:         *timeout,
+		PeerCount:       *npeer,
 	}
 	cfg := &cfg.NodeCfgUnparsed{
 		KeyFilename:    *nodeKeyFname,
@@ -193,40 +196,28 @@ func parseFlags() (*cmdOptions, *cfg.NodeCfgUnparsed, string) {
 	return opt, cfg, *cfgFilename
 }
 
-func put(d *godave.Dave, key, val []byte, privKey ed25519.PrivateKey, opt *cmdOptions) {
-	done := make(chan struct{}, 1)
-	if opt.Ntest == 1 { // don't log time if we're sending loads to test
-		start := time.Now()
-		go func() {
-			tick := time.NewTicker(time.Second)
-			for {
-				select {
-				case <-done:
-					fmt.Printf("\rdone\033[0K")
-					return
-				case <-tick.C:
-					fmt.Printf("\rworking for %s\033[0K", time.Since(start))
-				}
-			}
-		}()
-	}
+func put(d *godave.Dave, key string, val []byte, privKey ed25519.PrivateKey, opt *cmdOptions) {
 	keyInc := key
 	for i := 0; i < opt.Ntest; i++ {
 		if i > 0 {
-			keyInc = []byte(fmt.Sprintf("%s_%d", key, i))
+			keyInc = fmt.Sprintf("%s_%d", key, i)
 		}
 		// 100ms margin, incase clocks are not well synchronised
-		dat := &store.Dat{Key: keyInc, Val: val, Time: time.Now().Add(-100 * time.Millisecond)}
-		dat.Work, dat.Salt = pow.DoWork(dat.Key, dat.Val, pow.Ttb(dat.Time), opt.Difficulty)
-		dat.Sig = ed25519.Sign(privKey, dat.Work)
+		dat := &types.Dat{Key: keyInc, Val: val, Time: time.Now().Add(-100 * time.Millisecond)}
+		fmt.Println("computing proof...")
+		dat.Work, dat.Salt = pow.DoWork(dat.Key, dat.Val, dat.Time, opt.Difficulty)
+		dat.Sig = types.Signature(ed25519.Sign(privKey, dat.Work[:]))
 		dat.PubKey = privKey.Public().(ed25519.PublicKey)
-		<-d.Put(*dat)
-		if opt.Ntest > 1 {
-			fmt.Printf("\rput %s\n", dat.Key)
+		fmt.Printf("waiting for %d peers...\n", opt.PeerCount)
+		d.WaitForPeers(context.Background(), opt.PeerCount)
+		fmt.Println("writing to network...")
+		err := d.Put(*dat)
+		if err != nil {
+			exit(1, err.Error())
 		}
+		fmt.Printf("put %s\n", dat.Key)
 	}
 	time.Sleep(50 * time.Millisecond) // Let sending finish (will improve this)
-	done <- struct{}{}
 }
 
 func exit(code int, msg string, args ...any) {
