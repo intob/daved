@@ -73,7 +73,7 @@ func NewService(cfg *Cfg) *Service {
 	http.Handle("/status", corsMiddleware(http.HandlerFunc(svc.handleGetStatus)))
 	http.Handle("/work", corsMiddleware(http.HandlerFunc(svc.handleDoWork)))
 	http.Handle("/put", corsMiddleware(http.HandlerFunc(svc.handlePostPut)))
-	http.Handle("/list", corsMiddleware(http.HandlerFunc(svc.handlePostList)))
+	//http.Handle("/list", corsMiddleware(http.HandlerFunc(svc.handlePostList)))
 	http.Handle("/ws", corsMiddleware(http.HandlerFunc(svc.handleWebsocketConnection)))
 	return svc
 }
@@ -193,55 +193,57 @@ func (svc *Service) handlePostPut(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (svc *Service) handlePostList(w http.ResponseWriter, r *http.Request) {
-	if r.Method != "POST" {
-		w.WriteHeader(http.StatusBadRequest)
-		return
+/*
+	func (svc *Service) handlePostList(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "POST" {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		defer r.Body.Close()
+		dec := json.NewDecoder(r.Body)
+		req := &datListReq{}
+		err := dec.Decode(req)
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			w.Write([]byte(fmt.Sprintf("failed to decode request body: %s", err)))
+			return
+		}
+		pubKey, err := base64.RawURLEncoding.DecodeString(req.PubKey)
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			w.Write([]byte(fmt.Sprintf("failed to decode base64 pub key: %s", err)))
+			return
+		}
+		results := svc.dave.store.List(ed25519.PublicKey(pubKey), req.KeyPrefix)
+		resultsConverted := make([]*datEntry, 0, len(results))
+		for _, result := range results {
+			resultsConverted = append(resultsConverted, &datEntry{
+				Key:    result.Key,
+				Val:    base64.RawURLEncoding.EncodeToString(result.Val),
+				Salt:   base64.RawURLEncoding.EncodeToString(result.Salt[:]),
+				Time:   result.Time.UnixMilli(),
+				Work:   base64.RawURLEncoding.EncodeToString(result.Work[:]),
+				PubKey: base64.RawURLEncoding.EncodeToString(result.PubKey),
+				Sig:    base64.RawURLEncoding.EncodeToString(result.Sig[:]),
+			})
+		}
+		resp := &datListResp{
+			Results: resultsConverted,
+			Count:   len(results),
+		}
+		marshalled, err := json.MarshalIndent(resp, "", "  ")
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		w.Write(marshalled)
 	}
-	defer r.Body.Close()
-	dec := json.NewDecoder(r.Body)
-	req := &datListReq{}
-	err := dec.Decode(req)
-	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte(fmt.Sprintf("failed to decode request body: %s", err)))
-		return
-	}
-	pubKey, err := base64.RawURLEncoding.DecodeString(req.PubKey)
-	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte(fmt.Sprintf("failed to decode base64 pub key: %s", err)))
-		return
-	}
-	results := svc.dave.Store.List(ed25519.PublicKey(pubKey), req.KeyPrefix)
-	resultsConverted := make([]*datEntry, 0, len(results))
-	for _, result := range results {
-		resultsConverted = append(resultsConverted, &datEntry{
-			Key:    result.Key,
-			Val:    base64.RawURLEncoding.EncodeToString(result.Val),
-			Salt:   base64.RawURLEncoding.EncodeToString(result.Salt[:]),
-			Time:   result.Time.UnixMilli(),
-			Work:   base64.RawURLEncoding.EncodeToString(result.Work[:]),
-			PubKey: base64.RawURLEncoding.EncodeToString(result.PubKey),
-			Sig:    base64.RawURLEncoding.EncodeToString(result.Sig[:]),
-		})
-	}
-	resp := &datListResp{
-		Results: resultsConverted,
-		Count:   len(results),
-	}
-	marshalled, err := json.MarshalIndent(resp, "", "  ")
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-	w.Write(marshalled)
-}
+*/
 
 func (svc *Service) handleGetStatus(w http.ResponseWriter, r *http.Request) {
 	stat := &status{
 		//Peers: svc.dave.Peers.Count(),
-		Dats: svc.dave.Store.Count(),
+		//Dats: svc.dave.Store.Count(),
 	}
 	resp, err := json.MarshalIndent(stat, "", "  ")
 	if err != nil {

@@ -114,7 +114,7 @@ func main() {
 			exit(1, "failed to start http server: %s", err)
 		}
 		<-getCtx().Done()
-		<-d.Kill()
+		d.Kill()
 		fmt.Println("shutdown gracefully")
 	}
 }
@@ -197,6 +197,8 @@ func parseFlags() (*cmdOptions, *cfg.NodeCfgUnparsed, string) {
 }
 
 func put(d *godave.Dave, key string, val []byte, privKey ed25519.PrivateKey, opt *cmdOptions) {
+	fmt.Printf("waiting for %d peers...\n", opt.PeerCount)
+	d.WaitForPeers(context.Background(), opt.PeerCount)
 	keyInc := key
 	for i := 0; i < opt.Ntest; i++ {
 		if i > 0 {
@@ -208,9 +210,6 @@ func put(d *godave.Dave, key string, val []byte, privKey ed25519.PrivateKey, opt
 		dat.Work, dat.Salt = pow.DoWork(dat.Key, dat.Val, dat.Time, opt.Difficulty)
 		dat.Sig = types.Signature(ed25519.Sign(privKey, dat.Work[:]))
 		dat.PubKey = privKey.Public().(ed25519.PublicKey)
-		fmt.Printf("waiting for %d peers...\n", opt.PeerCount)
-		d.WaitForPeers(context.Background(), opt.PeerCount)
-		fmt.Println("writing to network...")
 		err := d.Put(*dat)
 		if err != nil {
 			exit(1, err.Error())
