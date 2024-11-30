@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
@@ -120,20 +119,12 @@ func main() {
 }
 
 func initNode(nodeCfg *cfg.NodeCfg) (*godave.Dave, chan<- string, error) {
-	logs := make(chan string, 1)
+	var logs chan<- string
 	if flag.NArg() == 0 || nodeCfg.LogLevel == logger.DEBUG {
-		go func() {
-			if nodeCfg.FlushLogBuffer {
-				for l := range logs {
-					fmt.Println(l)
-				}
-			} else {
-				dlw := bufio.NewWriter(os.Stdout)
-				for l := range logs {
-					fmt.Fprintln(dlw, l)
-				}
-			}
-		}()
+		// If running as node (not CLI), or log level is debug, print logs
+		logs = logger.StdOut(nodeCfg.FlushLogBuffer)
+	} else {
+		logs = logger.DevNull()
 	}
 	key, err := cfg.ReadKeyFile(nodeCfg.KeyFilename)
 	if err != nil {
