@@ -29,7 +29,7 @@ type NodeCfg struct {
 	BackupFilename string
 	ShardCap       int
 	LogLevel       logger.LogLevel
-	FlushLogBuffer bool
+	LogUnbuffered  bool
 }
 
 type NodeCfgUnparsed struct {
@@ -39,7 +39,7 @@ type NodeCfgUnparsed struct {
 	BackupFilename string   `yaml:"backup_filename"`
 	ShardCap       int      `yaml:"shard_cap"`
 	LogLevel       string   `yaml:"log_level"`
-	FlushLogBuffer string   `yaml:"flush_log_buffer"`
+	LogUnbuffered  string   `yaml:"log_unbuffered"`
 }
 
 func ReadNodeCfgFile(filename string) (*NodeCfgUnparsed, error) {
@@ -77,8 +77,8 @@ func MergeConfigs(dst, src NodeCfgUnparsed) *NodeCfgUnparsed {
 	if src.LogLevel != "" {
 		dst.LogLevel = src.LogLevel
 	}
-	if src.FlushLogBuffer != "" {
-		dst.FlushLogBuffer = src.FlushLogBuffer
+	if src.LogUnbuffered != "" {
+		dst.LogUnbuffered = src.LogUnbuffered
 	}
 	return &dst
 }
@@ -112,8 +112,8 @@ func ParseNodeCfg(unparsed *NodeCfgUnparsed) (*NodeCfg, error) {
 	} else {
 		cfg.LogLevel = logger.ERROR
 	}
-	if withDefaults.FlushLogBuffer != "" {
-		cfg.FlushLogBuffer = true
+	if withDefaults.LogUnbuffered != "" {
+		cfg.LogUnbuffered = true
 	}
 	return cfg, nil
 }

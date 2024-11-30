@@ -122,7 +122,7 @@ func initNode(nodeCfg *cfg.NodeCfg) (*godave.Dave, chan<- string, error) {
 	var logs chan<- string
 	if flag.NArg() == 0 || nodeCfg.LogLevel == logger.DEBUG {
 		// If running as node (not CLI), or log level is debug, print logs
-		logs = logger.StdOut(nodeCfg.FlushLogBuffer)
+		logs = logger.StdOut(!nodeCfg.LogUnbuffered)
 	} else {
 		logs = logger.DevNull()
 	}
@@ -166,7 +166,7 @@ func parseFlags() (*cmdOptions, *cfg.NodeCfgUnparsed, string) {
 	backup := flag.String("backup_filename", "", "Backup file, set to enable.")
 	shardCap := flag.Int("shard_cap", 0, "Shard capacity. There are 256 shards.")
 	logLevel := flag.String("log_level", "", "Log level ERROR or DEBUG.")
-	flush := flag.String("flush_log_buffer", "", "Flush log buffer after each write.")
+	logUnbuffered := flag.String("log_unbuffered", "", "Flush log buffer after each write.")
 	flag.Parse()
 	opt := &cmdOptions{
 		DataKeyFilename: *dataKeyFname,
@@ -182,7 +182,7 @@ func parseFlags() (*cmdOptions, *cfg.NodeCfgUnparsed, string) {
 		BackupFilename: *backup,
 		ShardCap:       *shardCap,
 		LogLevel:       *logLevel,
-		FlushLogBuffer: *flush,
+		LogUnbuffered:  *logUnbuffered,
 	}
 	return opt, cfg, *cfgFilename
 }

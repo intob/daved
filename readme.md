@@ -34,6 +34,7 @@ dave -udp_listen_addr "[::]:8000"
 | `-backup_filename` | Backup file location | "" |
 | `-shard_cap` | Maximum dats per shard | 10000 |
 | `-log_level` | Logging verbosity (ERROR/DEBUG) | "ERROR" |
+| `-log_unbuffered` | Set to any value to write to stdout without buffer | "" |
 
 ## Commands
 

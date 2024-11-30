@@ -1,9 +1,9 @@
-udp_listen_addr: ":1002"
+udp_listen_addr: :1002
 edges:
-  - pi1.local:1601
-  #- :1001
+  #- pi1.local:1601
+  - :1001
 shard_cap: 10000
-flush_log_buffer: true
+log_unbuffered: true
 #backup_filename: backup2
 #log_level: DEBUG
 node_key_filename: key2
