@@ -134,16 +134,20 @@ func initNode(nodeCfg *cfg.NodeCfg) (*godave.Dave, chan<- string, error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	d, err := godave.NewDave(&godave.Cfg{
+	logger, err := logger.NewLogger(&logger.LoggerCfg{
+		Level:  nodeCfg.LogLevel,
+		Output: logs,
+	})
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to create logger: %w", err)
+	}
+	d, err := godave.NewDave(&godave.DaveCfg{
 		Socket:         socket,
 		PrivateKey:     key,
 		Edges:          nodeCfg.Edges,
 		ShardCap:       nodeCfg.ShardCap,
 		BackupFilename: nodeCfg.BackupFilename,
-		Logger: logger.NewLogger(&logger.LoggerCfg{
-			Level:  nodeCfg.LogLevel,
-			Output: logs,
-		}),
+		Logger:         logger,
 	})
 	if err != nil {
 		return nil, nil, err
@@ -189,7 +193,7 @@ func parseFlags() (*cmdOptions, *cfg.NodeCfgUnparsed, string) {
 
 func put(d *godave.Dave, key string, val []byte, privKey ed25519.PrivateKey, opt *cmdOptions) {
 	fmt.Printf("waiting for %d peers...\n", opt.PeerCount)
-	d.WaitForPeers(context.Background(), opt.PeerCount)
+	d.WaitForActivePeers(context.Background(), opt.PeerCount)
 	keyInc := key
 	for i := 0; i < opt.Ntest; i++ {
 		if i > 0 {
