@@ -84,22 +84,32 @@ func main() {
 				exit(1, "missing arguments: put <KEY> <VAL>")
 			}
 			put(d, flag.Arg(1), []byte(flag.Arg(2)), dataPrivateKey, opt)
-			return
-			/*case "get":
+		case "get":
 			if flag.NArg() < 2 {
 				exit(1, "correct usage is get <KEY>")
 			}
-			tstart := time.Now()
-			var found bool
-			for dat := range d.Get(pubKey, []byte(flag.Arg(1)), opt.Timeout) {
-				found = true
-				fmt.Println(string(dat.Val))
-				fmt.Printf("t: %s\n", time.Since(tstart))
+			d, _, err := initNode(nodeCfg)
+			if err != nil {
+				exit(1, "failed to init node: %s", err)
 			}
-			if !found {
-				exit(1, "dat not found")
+			keyFilename := opt.DataKeyFilename
+			if keyFilename == "" { // fallback to node key file
+				keyFilename = nodeCfg.KeyFilename
 			}
-			*/
+			dataPrivateKey, err := cfg.ReadKeyFile(keyFilename)
+			if err != nil {
+				fmt.Printf("failed to read key file: %s\n", err)
+				return
+			}
+			d.WaitForActivePeers(context.Background(), opt.PeerCount)
+			dat, err := d.Get(&types.Get{
+				PublicKey: dataPrivateKey.Public().(ed25519.PublicKey),
+				DatKey:    flag.Arg(1)})
+			if err != nil {
+				exit(1, err.Error())
+			}
+			fmt.Printf("%s=%s\n", dat.Key, string(dat.Val))
+			d.Kill()
 		}
 	} else { // Node mode, wait for kill sig
 		d, logs, err := initNode(nodeCfg)
@@ -137,7 +147,7 @@ func initNode(nodeCfg *cfg.NodeCfg) (*godave.Dave, chan<- string, error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	logger, err := logger.NewLogger(&logger.LoggerCfg{
+	logger, err := logger.NewDaveLogger(&logger.DaveLoggerCfg{
 		Level:  nodeCfg.LogLevel,
 		Output: logs,
 	})
@@ -149,7 +159,6 @@ func initNode(nodeCfg *cfg.NodeCfg) (*godave.Dave, chan<- string, error) {
 		PrivateKey:     key,
 		Edges:          nodeCfg.Edges,
 		ShardCapacity:  nodeCfg.ShardCapacity,
-		TTL:            nodeCfg.TTL,
 		BackupFilename: nodeCfg.BackupFilename,
 		Logger:         logger,
 	})

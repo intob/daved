@@ -1,6 +1,6 @@
 # Dave CLI
 
-Dave is a distributed key-value store built on UDP, featuring proof-of-work data prioritization and trust-based peer selection.
+Dave is a distributed key-value store built on UDP. XOR distance metric is used to select storage replicas. Random storage challenges measure peer reliability.
 
 ## Installation
 
@@ -47,33 +47,3 @@ dave keygen [filename]
 ```bash
 dave put <key> <value>
 ```
-
-## Storage Architecture
-
-- Sharded storage with configurable capacity
-- Trust-based peer selection
-- Proof-of-work prioritization
-- Automatic data pruning
-- Backup and recovery
-
-## Network Protocol
-
-- UDP-based transport
-- Protobuf serialization
-- Maximum packet size: 1424 bytes
-- Random push distribution model
-- Trust-based peer selection
-
-## Security Features
-
-- Ed25519 signatures
-- Proof-of-work spam prevention
-- Trust-based resource allocation
-- Challenge-response peer verification
-
-## Performance Considerations
-
-- Concurrent shard processing
-- Configurable pruning intervals
-- Ring buffer for recent data
-- Trust-based resource allocation

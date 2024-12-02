@@ -19,8 +19,7 @@ const DEFAULT_KEY_FILENAME = "key.dave"
 var defaultCfgUnparsed = NodeCfgUnparsed{
 	KeyFilename:   DEFAULT_KEY_FILENAME,
 	UdpListenAddr: "[::]:127",
-	ShardCapacity: 1024 * 1024 * 1024,   // 1GB
-	TTL:           365 * 24 * time.Hour, // 1 year
+	ShardCapacity: 1024 * 1024 * 1024, // 1GB
 	LogLevel:      "ERROR",
 }
 
@@ -36,14 +35,13 @@ type NodeCfg struct {
 }
 
 type NodeCfgUnparsed struct {
-	KeyFilename    string        `yaml:"key_filename"`
-	UdpListenAddr  string        `yaml:"udp_listen_addr"`
-	Edges          []string      `yaml:"edges"`
-	BackupFilename string        `yaml:"backup_filename"`
-	ShardCapacity  int64         `yaml:"shard_capacity"`
-	TTL            time.Duration `yaml:"ttl"`
-	LogLevel       string        `yaml:"log_level"`
-	LogUnbuffered  string        `yaml:"log_unbuffered"`
+	KeyFilename    string   `yaml:"key_filename"`
+	UdpListenAddr  string   `yaml:"udp_listen_addr"`
+	Edges          []string `yaml:"edges"`
+	BackupFilename string   `yaml:"backup_filename"`
+	ShardCapacity  int64    `yaml:"shard_capacity"`
+	LogLevel       string   `yaml:"log_level"`
+	LogUnbuffered  string   `yaml:"log_unbuffered"`
 }
 
 func ReadNodeCfgFile(filename string) (*NodeCfgUnparsed, error) {
@@ -78,9 +76,6 @@ func MergeConfigs(dst, src NodeCfgUnparsed) *NodeCfgUnparsed {
 	if src.ShardCapacity != 0 {
 		dst.ShardCapacity = src.ShardCapacity
 	}
-	if src.TTL != 0 {
-		dst.TTL = src.TTL
-	}
 	if src.LogLevel != "" {
 		dst.LogLevel = src.LogLevel
 	}
@@ -96,7 +91,6 @@ func ParseNodeCfg(unparsed *NodeCfgUnparsed) (*NodeCfg, error) {
 		KeyFilename:    withDefaults.KeyFilename,
 		BackupFilename: withDefaults.BackupFilename,
 		ShardCapacity:  withDefaults.ShardCapacity,
-		TTL:            withDefaults.TTL,
 	}
 	var err error
 	cfg.UdpListenAddr, err = net.ResolveUDPAddr("udp", withDefaults.UdpListenAddr)
