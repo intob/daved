@@ -116,7 +116,7 @@ func main() {
 		if err != nil {
 			exit(1, "failed to init node: %s", err)
 		}
-		svc := api.NewService(&api.Cfg{
+		svc := api.NewService(&api.ServiceCfg{
 			ListenAddr: "127.0.0.1:8080",
 			Logs:       logs,
 			Dave:       d,

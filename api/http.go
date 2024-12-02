@@ -20,15 +20,22 @@ type Service struct {
 	dave       *godave.Dave
 }
 
-type Cfg struct {
+type ServiceCfg struct {
 	ListenAddr string
 	Logs       chan<- string
 	Dave       *godave.Dave
 }
 
 type status struct {
-	Peers int32  `json:"peers"`
-	Dats  uint32 `json:"dats"`
+	ActivePeers int            `json:"peers"`
+	UsedSpace   int64          `json:"used_space"`
+	Capacity    int64          `json:"capacity"`
+	Network     *networkStatus `json:"network"`
+}
+
+type networkStatus struct {
+	UsedSpace uint64 `json:"used_space"`
+	Capacity  uint64 `json:"capacity"`
 }
 
 type datWorkReq struct {
@@ -53,17 +60,7 @@ type datEntry struct {
 	Sig    string `json:"sig"`
 }
 
-type datListReq struct {
-	KeyPrefix string `json:"keyPrefix"`
-	PubKey    string `json:"pubKey"`
-}
-
-type datListResp struct {
-	Results []*datEntry `json:"results"`
-	Count   int         `json:"count"`
-}
-
-func NewService(cfg *Cfg) *Service {
+func NewService(cfg *ServiceCfg) *Service {
 	svc := &Service{
 		listenAddr: cfg.ListenAddr,
 		logs:       cfg.Logs,
@@ -73,7 +70,6 @@ func NewService(cfg *Cfg) *Service {
 	http.Handle("/status", corsMiddleware(http.HandlerFunc(svc.handleGetStatus)))
 	http.Handle("/work", corsMiddleware(http.HandlerFunc(svc.handleDoWork)))
 	http.Handle("/put", corsMiddleware(http.HandlerFunc(svc.handlePostPut)))
-	//http.Handle("/list", corsMiddleware(http.HandlerFunc(svc.handlePostList)))
 	http.Handle("/ws", corsMiddleware(http.HandlerFunc(svc.handleWebsocketConnection)))
 	return svc
 }
@@ -100,7 +96,7 @@ func (svc *Service) Start() error {
 		return err
 	case addr := <-addrChan:
 		svc.listenAddr = addr
-		svc.log("started http server on %s", addr)
+		svc.log("started http server on http://%s", addr)
 		return nil
 	case <-time.After(50 * time.Millisecond):
 		return fmt.Errorf("timeout waiting for server to start")
@@ -193,57 +189,13 @@ func (svc *Service) handlePostPut(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-/*
-	func (svc *Service) handlePostList(w http.ResponseWriter, r *http.Request) {
-		if r.Method != "POST" {
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		}
-		defer r.Body.Close()
-		dec := json.NewDecoder(r.Body)
-		req := &datListReq{}
-		err := dec.Decode(req)
-		if err != nil {
-			w.WriteHeader(http.StatusBadRequest)
-			w.Write([]byte(fmt.Sprintf("failed to decode request body: %s", err)))
-			return
-		}
-		pubKey, err := base64.RawURLEncoding.DecodeString(req.PubKey)
-		if err != nil {
-			w.WriteHeader(http.StatusBadRequest)
-			w.Write([]byte(fmt.Sprintf("failed to decode base64 pub key: %s", err)))
-			return
-		}
-		results := svc.dave.store.List(ed25519.PublicKey(pubKey), req.KeyPrefix)
-		resultsConverted := make([]*datEntry, 0, len(results))
-		for _, result := range results {
-			resultsConverted = append(resultsConverted, &datEntry{
-				Key:    result.Key,
-				Val:    base64.RawURLEncoding.EncodeToString(result.Val),
-				Salt:   base64.RawURLEncoding.EncodeToString(result.Salt[:]),
-				Time:   result.Time.UnixMilli(),
-				Work:   base64.RawURLEncoding.EncodeToString(result.Work[:]),
-				PubKey: base64.RawURLEncoding.EncodeToString(result.PubKey),
-				Sig:    base64.RawURLEncoding.EncodeToString(result.Sig[:]),
-			})
-		}
-		resp := &datListResp{
-			Results: resultsConverted,
-			Count:   len(results),
-		}
-		marshalled, err := json.MarshalIndent(resp, "", "  ")
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			return
-		}
-		w.Write(marshalled)
-	}
-*/
-
 func (svc *Service) handleGetStatus(w http.ResponseWriter, r *http.Request) {
+	networkUsed, networkCap := svc.dave.NetworkUsedSpaceAndCapacity()
 	stat := &status{
-		//Peers: svc.dave.Peers.Count(),
-		//Dats: svc.dave.Store.Count(),
+		ActivePeers: svc.dave.ActivePeerCount(),
+		UsedSpace:   svc.dave.UsedSpace(),
+		Capacity:    svc.dave.Capacity(),
+		Network:     &networkStatus{UsedSpace: networkUsed, Capacity: networkCap},
 	}
 	resp, err := json.MarshalIndent(stat, "", "  ")
 	if err != nil {
