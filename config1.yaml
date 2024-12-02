@@ -1,8 +1,5 @@
 udp_listen_addr: :1001
 edges:
-  #- pi1.local:1601
-shard_cap: 10000
+  - pi1.local:1601
 log_unbuffered: true
-#backup_filename: backup1
-#log_level: DEBUG
 node_key_filename: key1

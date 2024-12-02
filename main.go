@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"crypto/ed25519"
-	"crypto/rand"
 	_ "embed"
 	"flag"
 	"fmt"
@@ -61,7 +60,7 @@ func main() {
 			} else {
 				filename = flag.Arg(1)
 			}
-			_, priv, err := ed25519.GenerateKey(rand.Reader)
+			_, priv, err := ed25519.GenerateKey(nil)
 			if err != nil {
 				exit(1, "failed to generate key: %s", err)
 			}
@@ -142,12 +141,14 @@ func initNode(nodeCfg *cfg.NodeCfg) (*godave.Dave, chan<- string, error) {
 		return nil, nil, fmt.Errorf("failed to create logger: %w", err)
 	}
 	d, err := godave.NewDave(&godave.DaveCfg{
-		Socket:         socket,
-		PrivateKey:     key,
-		Edges:          nodeCfg.Edges,
-		ShardCap:       nodeCfg.ShardCap,
-		BackupFilename: nodeCfg.BackupFilename,
-		Logger:         logger,
+		Socket:             socket,
+		PrivateKey:         key,
+		Edges:              nodeCfg.Edges,
+		ShardCapacity:      nodeCfg.ShardCapacity,
+		RingBufferCapacity: nodeCfg.RingBufferCapacity,
+		TTL:                nodeCfg.TTL,
+		BackupFilename:     nodeCfg.BackupFilename,
+		Logger:             logger,
 	})
 	if err != nil {
 		return nil, nil, err
@@ -164,11 +165,12 @@ func parseFlags() (*cmdOptions, *cfg.NodeCfgUnparsed, string) {
 	timeout := flag.Duration("timeout", 10*time.Second, "Timeout for get command.")
 	npeer := flag.Int("npeer", 1, "Number of peers to wait for.")
 	// Node flags
-	nodeKeyFname := flag.String("node_key_filename", cfg.DEFAULT_KEY_FILENAME, "Node private key filename")
+	nodeKeyFname := flag.String("node_key_filename", "", "Node private key filename")
 	udpLaddr := flag.String("udp_listen_addr", "", "Listen address:port")
 	edges := flag.String("edges", "", "Comma-separated bootstrap address:port")
 	backup := flag.String("backup_filename", "", "Backup file, set to enable.")
-	shardCap := flag.Int("shard_cap", 0, "Shard capacity. There are 256 shards.")
+	shardCap := flag.Int64("shard_capacity", 0, "Shard capacity. There are 256 shards.")
+	ringCap := flag.Int("ringbuffer_capacity", 0, "Shard capacity. There are 256 shards.")
 	logLevel := flag.String("log_level", "", "Log level ERROR or DEBUG.")
 	logUnbuffered := flag.String("log_unbuffered", "", "Flush log buffer after each write.")
 	flag.Parse()
@@ -180,13 +182,14 @@ func parseFlags() (*cmdOptions, *cfg.NodeCfgUnparsed, string) {
 		PeerCount:       *npeer,
 	}
 	cfg := &cfg.NodeCfgUnparsed{
-		KeyFilename:    *nodeKeyFname,
-		UdpListenAddr:  *udpLaddr,
-		Edges:          strings.Split(*edges, ","),
-		BackupFilename: *backup,
-		ShardCap:       *shardCap,
-		LogLevel:       *logLevel,
-		LogUnbuffered:  *logUnbuffered,
+		KeyFilename:        *nodeKeyFname,
+		UdpListenAddr:      *udpLaddr,
+		Edges:              strings.Split(*edges, ","),
+		BackupFilename:     *backup,
+		ShardCapacity:      *shardCap,
+		RingBufferCapacity: *ringCap,
+		LogLevel:           *logLevel,
+		LogUnbuffered:      *logUnbuffered,
 	}
 	return opt, cfg, *cfgFilename
 }
