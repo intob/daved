@@ -71,7 +71,11 @@ func main() {
 			if err != nil {
 				exit(1, "failed to init node: %s", err)
 			}
-			dataPrivateKey, err := cfg.ReadKeyFile(opt.DataKeyFilename)
+			keyFilename := opt.DataKeyFilename
+			if keyFilename == "" { // fallback to node key file
+				keyFilename = nodeCfg.KeyFilename
+			}
+			dataPrivateKey, err := cfg.ReadKeyFile(keyFilename)
 			if err != nil {
 				fmt.Printf("failed to read key file: %s\n", err)
 				return
@@ -141,14 +145,13 @@ func initNode(nodeCfg *cfg.NodeCfg) (*godave.Dave, chan<- string, error) {
 		return nil, nil, fmt.Errorf("failed to create logger: %w", err)
 	}
 	d, err := godave.NewDave(&godave.DaveCfg{
-		Socket:             socket,
-		PrivateKey:         key,
-		Edges:              nodeCfg.Edges,
-		ShardCapacity:      nodeCfg.ShardCapacity,
-		RingBufferCapacity: nodeCfg.RingBufferCapacity,
-		TTL:                nodeCfg.TTL,
-		BackupFilename:     nodeCfg.BackupFilename,
-		Logger:             logger,
+		Socket:         socket,
+		PrivateKey:     key,
+		Edges:          nodeCfg.Edges,
+		ShardCapacity:  nodeCfg.ShardCapacity,
+		TTL:            nodeCfg.TTL,
+		BackupFilename: nodeCfg.BackupFilename,
+		Logger:         logger,
 	})
 	if err != nil {
 		return nil, nil, err
@@ -159,7 +162,7 @@ func initNode(nodeCfg *cfg.NodeCfg) (*godave.Dave, chan<- string, error) {
 func parseFlags() (*cmdOptions, *cfg.NodeCfgUnparsed, string) {
 	cfgFilename := flag.String("cfg", "", "Config filename")
 	// CLI flags
-	dataKeyFname := flag.String("data_key_filename", cfg.DEFAULT_KEY_FILENAME, "Data private key filename")
+	dataKeyFname := flag.String("data_key_filename", "", "Data private key filename")
 	difficulty := flag.Uint("d", godave.MIN_WORK, "For set command. Number of leading zero bits.")
 	ntest := flag.Int("ntest", 1, "For put command. Repeat work & send n times. For testing.")
 	timeout := flag.Duration("timeout", 10*time.Second, "Timeout for get command.")
@@ -170,7 +173,6 @@ func parseFlags() (*cmdOptions, *cfg.NodeCfgUnparsed, string) {
 	edges := flag.String("edges", "", "Comma-separated bootstrap address:port")
 	backup := flag.String("backup_filename", "", "Backup file, set to enable.")
 	shardCap := flag.Int64("shard_capacity", 0, "Shard capacity. There are 256 shards.")
-	ringCap := flag.Int("ringbuffer_capacity", 0, "Shard capacity. There are 256 shards.")
 	logLevel := flag.String("log_level", "", "Log level ERROR or DEBUG.")
 	logUnbuffered := flag.String("log_unbuffered", "", "Flush log buffer after each write.")
 	flag.Parse()
@@ -182,14 +184,13 @@ func parseFlags() (*cmdOptions, *cfg.NodeCfgUnparsed, string) {
 		PeerCount:       *npeer,
 	}
 	cfg := &cfg.NodeCfgUnparsed{
-		KeyFilename:        *nodeKeyFname,
-		UdpListenAddr:      *udpLaddr,
-		Edges:              strings.Split(*edges, ","),
-		BackupFilename:     *backup,
-		ShardCapacity:      *shardCap,
-		RingBufferCapacity: *ringCap,
-		LogLevel:           *logLevel,
-		LogUnbuffered:      *logUnbuffered,
+		KeyFilename:    *nodeKeyFname,
+		UdpListenAddr:  *udpLaddr,
+		Edges:          strings.Split(*edges, ","),
+		BackupFilename: *backup,
+		ShardCapacity:  *shardCap,
+		LogLevel:       *logLevel,
+		LogUnbuffered:  *logUnbuffered,
 	}
 	return opt, cfg, *cfgFilename
 }

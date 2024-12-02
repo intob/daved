@@ -17,36 +17,33 @@ import (
 const DEFAULT_KEY_FILENAME = "key.dave"
 
 var defaultCfgUnparsed = NodeCfgUnparsed{
-	KeyFilename:        DEFAULT_KEY_FILENAME,
-	UdpListenAddr:      "[::]:127",
-	ShardCapacity:      1024 * 1024 * 1024,   // 1GB
-	RingBufferCapacity: 100_000,              // 100K dats
-	TTL:                365 * 24 * time.Hour, // 1 year
-	LogLevel:           "ERROR",
+	KeyFilename:   DEFAULT_KEY_FILENAME,
+	UdpListenAddr: "[::]:127",
+	ShardCapacity: 1024 * 1024 * 1024,   // 1GB
+	TTL:           365 * 24 * time.Hour, // 1 year
+	LogLevel:      "ERROR",
 }
 
 type NodeCfg struct {
-	KeyFilename        string
-	UdpListenAddr      *net.UDPAddr
-	Edges              []netip.AddrPort
-	BackupFilename     string
-	ShardCapacity      int64
-	RingBufferCapacity int
-	TTL                time.Duration
-	LogLevel           logger.LogLevel
-	LogUnbuffered      bool
+	KeyFilename    string
+	UdpListenAddr  *net.UDPAddr
+	Edges          []netip.AddrPort
+	BackupFilename string
+	ShardCapacity  int64
+	TTL            time.Duration
+	LogLevel       logger.LogLevel
+	LogUnbuffered  bool
 }
 
 type NodeCfgUnparsed struct {
-	KeyFilename        string        `yaml:"key_filename"`
-	UdpListenAddr      string        `yaml:"udp_listen_addr"`
-	Edges              []string      `yaml:"edges"`
-	BackupFilename     string        `yaml:"backup_filename"`
-	ShardCapacity      int64         `yaml:"shard_capacity"`
-	RingBufferCapacity int           `yaml:"ringbuffer_capacity"`
-	TTL                time.Duration `yaml:"ttl"`
-	LogLevel           string        `yaml:"log_level"`
-	LogUnbuffered      string        `yaml:"log_unbuffered"`
+	KeyFilename    string        `yaml:"key_filename"`
+	UdpListenAddr  string        `yaml:"udp_listen_addr"`
+	Edges          []string      `yaml:"edges"`
+	BackupFilename string        `yaml:"backup_filename"`
+	ShardCapacity  int64         `yaml:"shard_capacity"`
+	TTL            time.Duration `yaml:"ttl"`
+	LogLevel       string        `yaml:"log_level"`
+	LogUnbuffered  string        `yaml:"log_unbuffered"`
 }
 
 func ReadNodeCfgFile(filename string) (*NodeCfgUnparsed, error) {
@@ -81,9 +78,6 @@ func MergeConfigs(dst, src NodeCfgUnparsed) *NodeCfgUnparsed {
 	if src.ShardCapacity != 0 {
 		dst.ShardCapacity = src.ShardCapacity
 	}
-	if src.RingBufferCapacity != 0 {
-		dst.RingBufferCapacity = src.RingBufferCapacity
-	}
 	if src.TTL != 0 {
 		dst.TTL = src.TTL
 	}
@@ -99,11 +93,10 @@ func MergeConfigs(dst, src NodeCfgUnparsed) *NodeCfgUnparsed {
 func ParseNodeCfg(unparsed *NodeCfgUnparsed) (*NodeCfg, error) {
 	withDefaults := MergeConfigs(defaultCfgUnparsed, *unparsed)
 	cfg := &NodeCfg{
-		KeyFilename:        withDefaults.KeyFilename,
-		BackupFilename:     withDefaults.BackupFilename,
-		ShardCapacity:      withDefaults.ShardCapacity,
-		RingBufferCapacity: withDefaults.RingBufferCapacity,
-		TTL:                withDefaults.TTL,
+		KeyFilename:    withDefaults.KeyFilename,
+		BackupFilename: withDefaults.BackupFilename,
+		ShardCapacity:  withDefaults.ShardCapacity,
+		TTL:            withDefaults.TTL,
 	}
 	var err error
 	cfg.UdpListenAddr, err = net.ResolveUDPAddr("udp", withDefaults.UdpListenAddr)

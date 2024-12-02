@@ -2,4 +2,5 @@ udp_listen_addr: :1003
 edges:
   - pi1.local:1601
   #- :1001
+log_unbuffered: true
 node_key_filename: key3
