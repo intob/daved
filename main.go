@@ -102,13 +102,15 @@ func main() {
 				return
 			}
 			d.WaitForActivePeers(context.Background(), opt.PeerCount)
-			dat, err := d.Get(&types.Get{
+			ctx, _ := context.WithTimeout(context.Background(), 2*time.Second)
+			start := time.Now()
+			dat, err := d.Get(ctx, &types.Get{
 				PublicKey: dataPrivateKey.Public().(ed25519.PublicKey),
 				DatKey:    flag.Arg(1)})
 			if err != nil {
 				exit(1, err.Error())
 			}
-			fmt.Printf("%s=%s\n", dat.Key, string(dat.Val))
+			fmt.Printf("%s=%s (took %s)\n", dat.Key, string(dat.Val), time.Since(start))
 			d.Kill()
 		}
 	} else { // Node mode, wait for kill sig
@@ -228,6 +230,7 @@ func put(d *godave.Dave, key string, val []byte, privKey ed25519.PrivateKey, opt
 }
 
 func exit(code int, msg string, args ...any) {
+	time.Sleep(time.Millisecond) // wait for logs to flush
 	fmt.Printf(msg+"\n", args...)
 	os.Exit(code)
 }
