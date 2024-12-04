@@ -4,12 +4,12 @@ import (
 	"net/http"
 
 	"github.com/gorilla/websocket"
-	"github.com/intob/godave/types"
+	"github.com/intob/godave/network"
 )
 
 var upgrader = websocket.Upgrader{
-	ReadBufferSize:  types.MaxMsgLen,
-	WriteBufferSize: types.MaxMsgLen,
+	ReadBufferSize:  network.MAX_MSG_LEN,
+	WriteBufferSize: network.MAX_MSG_LEN,
 	CheckOrigin: func(r *http.Request) bool {
 		return true // Accepting all requests
 	},

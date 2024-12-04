@@ -10,8 +10,7 @@ import (
 	"time"
 
 	"github.com/intob/godave"
-	"github.com/intob/godave/pow"
-	"github.com/intob/godave/types"
+	"github.com/intob/godave/dat"
 )
 
 type Service struct {
@@ -39,15 +38,13 @@ type networkStatus struct {
 }
 
 type datWorkReq struct {
-	Key        string `json:"key"`
-	Val        string `json:"val"`
-	Time       int64  `json:"time"` // Unix milli
+	Signature  string `json:"signature"`
 	Difficulty uint8  `json:"difficulty"`
 }
 
 type datWorkResp struct {
-	Salt string `json:"salt"`
 	Work string `json:"work"`
+	Salt string `json:"salt"`
 }
 
 type datEntry struct {
@@ -121,11 +118,19 @@ func (svc *Service) handleDoWork(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(fmt.Sprintf("failed to decode request body: %s", err)))
 		return
 	}
-	timeParsed := time.UnixMilli(req.Time)
-	work, salt := pow.DoWork(req.Key, []byte(req.Val), timeParsed, req.Difficulty)
+	sig, err := base64.RawURLEncoding.DecodeString(req.Signature)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(fmt.Sprintf("failed to decode signature: %s", err)))
+	}
+	if len(sig) != 64 {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte("invalid signature"))
+	}
+	work, salt := dat.DoWork(dat.Signature(sig), req.Difficulty)
 	resp := &datWorkResp{
-		Salt: base64.RawURLEncoding.EncodeToString(salt[:]),
 		Work: base64.RawURLEncoding.EncodeToString(work[:]),
+		Salt: base64.RawURLEncoding.EncodeToString(salt[:]),
 	}
 	respJson, err := json.MarshalIndent(resp, "", "  ")
 	if err != nil {
@@ -174,14 +179,14 @@ func (svc *Service) handlePostPut(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(fmt.Sprintf("failed to decode base64 sig: %s", err)))
 		return
 	}
-	err = svc.dave.Put(types.Dat{
+	err = svc.dave.Put(dat.Dat{
 		Key:    req.Key,
 		Val:    []byte(req.Val),
 		Time:   time.UnixMilli(req.Time),
-		Salt:   types.Salt(salt),
-		Work:   types.Hash(work),
+		Salt:   dat.Salt(salt),
+		Work:   dat.Work(work),
 		PubKey: ed25519.PublicKey(pubKey),
-		Sig:    types.Signature(sig),
+		Sig:    dat.Signature(sig),
 	})
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)

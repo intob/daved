@@ -3,4 +3,4 @@ edges:
   - pi1.local:1601
   #- :1002
 log_unbuffered: true
-node_key_filename: key1
+key_filename: key1

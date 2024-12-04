@@ -16,8 +16,9 @@ import (
 	"github.com/intob/daved/api"
 	"github.com/intob/daved/cfg"
 	"github.com/intob/godave"
+	"github.com/intob/godave/dat"
 	"github.com/intob/godave/logger"
-	"github.com/intob/godave/pow"
+	"github.com/intob/godave/network"
 	"github.com/intob/godave/types"
 )
 
@@ -102,15 +103,16 @@ func main() {
 				return
 			}
 			d.WaitForActivePeers(context.Background(), opt.PeerCount)
-			ctx, _ := context.WithTimeout(context.Background(), 2*time.Second)
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			defer cancel()
 			start := time.Now()
-			dat, err := d.Get(ctx, &types.Get{
+			entry, err := d.Get(ctx, &types.Get{
 				PublicKey: dataPrivateKey.Public().(ed25519.PublicKey),
 				DatKey:    flag.Arg(1)})
 			if err != nil {
 				exit(1, err.Error())
 			}
-			fmt.Printf("%s=%s (took %s)\n", dat.Key, string(dat.Val), time.Since(start))
+			fmt.Printf("%s=%s (took %s)\n", entry.Dat.Key, string(entry.Dat.Val), time.Since(start))
 			d.Kill()
 		}
 	} else { // Node mode, wait for kill sig
@@ -174,7 +176,7 @@ func parseFlags() (*cmdOptions, *cfg.NodeCfgUnparsed, string) {
 	cfgFilename := flag.String("cfg", "", "Config filename")
 	// CLI flags
 	dataKeyFname := flag.String("data_key_filename", "", "Data private key filename")
-	difficulty := flag.Uint("d", godave.MIN_WORK, "For set command. Number of leading zero bits.")
+	difficulty := flag.Uint("d", network.MIN_WORK, "For set command. Number of leading zero bits.")
 	ntest := flag.Int("ntest", 1, "For put command. Repeat work & send n times. For testing.")
 	timeout := flag.Duration("timeout", 10*time.Second, "Timeout for get command.")
 	npeer := flag.Int("npeer", 1, "Number of peers to wait for.")
@@ -215,16 +217,16 @@ func put(d *godave.Dave, key string, val []byte, privKey ed25519.PrivateKey, opt
 			keyInc = fmt.Sprintf("%s_%d", key, i)
 		}
 		// 100ms margin, incase clocks are not well synchronised
-		dat := &types.Dat{Key: keyInc, Val: val, Time: time.Now().Add(-100 * time.Millisecond)}
+		new := &dat.Dat{Key: keyInc, Val: val, Time: time.Now().Add(-100 * time.Millisecond),
+			PubKey: privKey.Public().(ed25519.PublicKey)}
 		fmt.Println("computing proof...")
-		dat.Work, dat.Salt = pow.DoWork(dat.Key, dat.Val, dat.Time, opt.Difficulty)
-		dat.Sig = types.Signature(ed25519.Sign(privKey, dat.Work[:]))
-		dat.PubKey = privKey.Public().(ed25519.PublicKey)
-		err := d.Put(*dat)
+		new.Sign(privKey)
+		new.Work, new.Salt = dat.DoWork(new.Sig, opt.Difficulty)
+		err := d.Put(*new)
 		if err != nil {
 			exit(1, err.Error())
 		}
-		fmt.Printf("put %s\n", dat.Key)
+		fmt.Printf("put %s\n", new.Key)
 	}
 	time.Sleep(50 * time.Millisecond) // Let sending finish (will improve this)
 }
