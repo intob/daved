@@ -1,7 +1,6 @@
 package api
 
 import (
-	"crypto/ed25519"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -47,6 +46,7 @@ type datWorkResp struct {
 	Salt string `json:"salt"`
 }
 
+/*
 type datEntry struct {
 	Key    string `json:"key"`
 	Val    string `json:"val"`
@@ -56,6 +56,7 @@ type datEntry struct {
 	PubKey string `json:"pubKey"`
 	Sig    string `json:"sig"`
 }
+*/
 
 func NewService(cfg *ServiceCfg) *Service {
 	svc := &Service{
@@ -66,7 +67,7 @@ func NewService(cfg *ServiceCfg) *Service {
 	http.Handle("/", corsMiddleware(http.HandlerFunc(svc.handleGetStatus)))
 	http.Handle("/status", corsMiddleware(http.HandlerFunc(svc.handleGetStatus)))
 	http.Handle("/work", corsMiddleware(http.HandlerFunc(svc.handleDoWork)))
-	http.Handle("/put", corsMiddleware(http.HandlerFunc(svc.handlePostPut)))
+	//http.Handle("/put", corsMiddleware(http.HandlerFunc(svc.handlePostPut)))
 	http.Handle("/ws", corsMiddleware(http.HandlerFunc(svc.handleWebsocketConnection)))
 	return svc
 }
@@ -141,58 +142,60 @@ func (svc *Service) handleDoWork(w http.ResponseWriter, r *http.Request) {
 	w.Write(respJson)
 }
 
-func (svc *Service) handlePostPut(w http.ResponseWriter, r *http.Request) {
-	if r.Method != "POST" {
-		w.WriteHeader(http.StatusBadRequest)
-		return
+/*
+	func (svc *Service) handlePostPut(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "POST" {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		defer r.Body.Close()
+		dec := json.NewDecoder(r.Body)
+		req := &datEntry{}
+		err := dec.Decode(req)
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			w.Write([]byte(fmt.Sprintf("failed to decode request body: %s", err)))
+			return
+		}
+		salt, err := base64.RawURLEncoding.DecodeString(req.Salt)
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			w.Write([]byte(fmt.Sprintf("failed to decode base64 salt: %s", err)))
+			return
+		}
+		work, err := base64.RawURLEncoding.DecodeString(req.Work)
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			w.Write([]byte(fmt.Sprintf("failed to decode base64 work: %s", err)))
+			return
+		}
+		pubKey, err := base64.RawURLEncoding.DecodeString(req.PubKey)
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			w.Write([]byte(fmt.Sprintf("failed to decode base64 pub key: %s", err)))
+			return
+		}
+		sig, err := base64.RawURLEncoding.DecodeString(req.Sig)
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			w.Write([]byte(fmt.Sprintf("failed to decode base64 sig: %s", err)))
+			return
+		}
+		err = svc.dave.Put(dat.Dat{
+			Key:    req.Key,
+			Val:    []byte(req.Val),
+			Time:   time.UnixMilli(req.Time),
+			Salt:   dat.Salt(salt),
+			Work:   dat.Work(work),
+			PubKey: ed25519.PublicKey(pubKey),
+			Sig:    dat.Signature(sig),
+		})
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte(err.Error()))
+		}
 	}
-	defer r.Body.Close()
-	dec := json.NewDecoder(r.Body)
-	req := &datEntry{}
-	err := dec.Decode(req)
-	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte(fmt.Sprintf("failed to decode request body: %s", err)))
-		return
-	}
-	salt, err := base64.RawURLEncoding.DecodeString(req.Salt)
-	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte(fmt.Sprintf("failed to decode base64 salt: %s", err)))
-		return
-	}
-	work, err := base64.RawURLEncoding.DecodeString(req.Work)
-	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte(fmt.Sprintf("failed to decode base64 work: %s", err)))
-		return
-	}
-	pubKey, err := base64.RawURLEncoding.DecodeString(req.PubKey)
-	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte(fmt.Sprintf("failed to decode base64 pub key: %s", err)))
-		return
-	}
-	sig, err := base64.RawURLEncoding.DecodeString(req.Sig)
-	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte(fmt.Sprintf("failed to decode base64 sig: %s", err)))
-		return
-	}
-	err = svc.dave.Put(dat.Dat{
-		Key:    req.Key,
-		Val:    []byte(req.Val),
-		Time:   time.UnixMilli(req.Time),
-		Salt:   dat.Salt(salt),
-		Work:   dat.Work(work),
-		PubKey: ed25519.PublicKey(pubKey),
-		Sig:    dat.Signature(sig),
-	})
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte(err.Error()))
-	}
-}
+*/
 
 func (svc *Service) handleGetStatus(w http.ResponseWriter, r *http.Request) {
 	networkUsed, networkCap := svc.dave.NetworkUsedSpaceAndCapacity()

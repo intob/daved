@@ -6,10 +6,11 @@ import (
 	_ "embed"
 	"flag"
 	"fmt"
-	"net"
 	"os"
 	"os/signal"
+	"runtime"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -147,10 +148,6 @@ func initNode(nodeCfg *cfg.NodeCfg) (*godave.Dave, chan<- string, error) {
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to load key file: %s", err)
 	}
-	socket, err := net.ListenUDP("udp", nodeCfg.UdpListenAddr)
-	if err != nil {
-		return nil, nil, err
-	}
 	logger, err := logger.NewDaveLogger(&logger.DaveLoggerCfg{
 		Level:  nodeCfg.LogLevel,
 		Output: logs,
@@ -159,7 +156,7 @@ func initNode(nodeCfg *cfg.NodeCfg) (*godave.Dave, chan<- string, error) {
 		return nil, nil, fmt.Errorf("failed to create logger: %w", err)
 	}
 	d, err := godave.NewDave(&godave.DaveCfg{
-		Socket:         socket,
+		UdpListenAddr:  nodeCfg.UdpListenAddr,
 		PrivateKey:     key,
 		Edges:          nodeCfg.Edges,
 		ShardCapacity:  nodeCfg.ShardCapacity,
@@ -181,7 +178,7 @@ func parseFlags() (*cmdOptions, *cfg.NodeCfgUnparsed, string) {
 	timeout := flag.Duration("timeout", 10*time.Second, "Timeout for get command.")
 	npeer := flag.Int("npeer", 1, "Number of peers to wait for.")
 	// Node flags
-	nodeKeyFname := flag.String("node_key_filename", "", "Node private key filename")
+	nodeKeyFname := flag.String("key_filename", "", "Node private key filename")
 	udpLaddr := flag.String("udp_listen_addr", "", "Listen address:port")
 	edges := flag.String("edges", "", "Comma-separated bootstrap address:port")
 	backup := flag.String("backup_filename", "", "Backup file, set to enable.")
@@ -211,24 +208,48 @@ func parseFlags() (*cmdOptions, *cfg.NodeCfgUnparsed, string) {
 func put(d *godave.Dave, key string, val []byte, privKey ed25519.PrivateKey, opt *cmdOptions) {
 	fmt.Printf("waiting for %d peers...\n", opt.PeerCount)
 	d.WaitForActivePeers(context.Background(), opt.PeerCount)
+	pubKey := privKey.Public().(ed25519.PublicKey)
+	datCh, errors, err := d.BatchWriter(pubKey)
+	if err != nil {
+		exit(1, "failed to get batch writer: %s", err)
+	}
 	keyInc := key
+	work := make(chan dat.Dat, runtime.NumCPU())
+	wg := sync.WaitGroup{}
+	for i := 0; i < runtime.NumCPU(); i++ {
+		wg.Add(1)
+		go func() {
+			for w := range work {
+				(&w).Sign(privKey)
+				w.Work, w.Salt = dat.DoWork(w.Sig, opt.Difficulty)
+				datCh <- w
+			}
+			wg.Done()
+		}()
+	}
+	start := time.Now()
 	for i := 0; i < opt.Ntest; i++ {
 		if i > 0 {
 			keyInc = fmt.Sprintf("%s_%d", key, i)
 		}
 		// 100ms margin, incase clocks are not well synchronised
-		new := &dat.Dat{Key: keyInc, Val: val, Time: time.Now().Add(-100 * time.Millisecond),
-			PubKey: privKey.Public().(ed25519.PublicKey)}
-		fmt.Println("computing proof...")
-		new.Sign(privKey)
-		new.Work, new.Salt = dat.DoWork(new.Sig, opt.Difficulty)
-		err := d.Put(*new)
-		if err != nil {
-			exit(1, err.Error())
+		new := &dat.Dat{Key: keyInc, Val: val, Time: time.Now().Add(-100 * time.Millisecond), PubKey: pubKey}
+		if opt.Ntest == 1 {
+			fmt.Println("computing proof...")
+		}
+		work <- *new
+		select {
+		case err := <-errors:
+			exit(1, "error: %s", err)
+		default:
 		}
 		fmt.Printf("put %s\n", new.Key)
 	}
-	time.Sleep(50 * time.Millisecond) // Let sending finish (will improve this)
+	close(work)
+	wg.Wait()
+	close(datCh)
+	fmt.Printf("took %s\n", time.Since(start))
+	time.Sleep(50 * time.Millisecond) // Let sending finish
 }
 
 func exit(code int, msg string, args ...any) {
